@@ -1,9 +1,16 @@
 #!/bin/dash
-#author alex.zhong
-#date 2014-09-09
-#version 1.0.5
 ################################################################
-# Change log
+# Author 
+#       Alex.zhong
+# Last Modified Date 
+#       2014-09-24
+# Version 
+#       1.0.6
+#
+# Change Log
+# 1.0.6
+#       Fixed invalid target file name due to using default 
+#       project by pressing key enter
 # 1.0.5 
 #       增加重签名功能:resign脚本参数的支持
 # 1.0.4 
@@ -41,7 +48,7 @@ echo -n "1、请输入项目名[eg:${PROJECT_DAFAULT}]:"
 read PROJECT
 
 IMAGESET="ImageBin"
-IMAGETAR_PREFIX="ImageBin_${PROJECT}_"
+IMAGETAR_PREFIX="ImageBin_${PROJECT:-${PROJECT_DAFAULT}}_"
 
 if [ -z ${PROJECT} ]; then
   echo ">>>未输入项目名！默认: ${PROJECT_DAFAULT}"
