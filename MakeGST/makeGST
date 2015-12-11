@@ -5,9 +5,11 @@
 # Last Modified Date
 #       2015-12-11
 # Version
-#       2.1.0 beta
+#       2.1.2
 #
 # Change Log
+# 2.1.1
+#       1.Fix an issue that will make build fail
 # 2.1.0
 #       1.Fix an issue that could prevent d5 or d3 build error after performed a update-api option
 #       2.Add feature to generate android studio project file when need
@@ -38,7 +40,7 @@ echo "#       Alex.zhong"
 echo "# Last Modified Date" 
 echo "#       2015-12-11"
 echo "# Version "
-echo "#       2.1.0"
+echo "#       2.1.1"
 echo "# Notes "
 echo "#       Now you can finish compiling and image packaging at "
 echo "#       one time by following command: "
@@ -174,7 +176,7 @@ make ${JOBS} 2>&1 | tee build.log
 check_error ${PIPESTATUS[0]}
 
 # ADD FOR ANDROID STUDIO
-if [ !-f android.ipr ]; then
+if [ ! -f android.ipr ]; then
   print_stage "执行: mmm development/tools/idegen/"
   echo ">>>生成Andoid Studio工程的配置文件"
   mmm development/tools/idegen/
@@ -213,7 +215,7 @@ if [ ${OPTION_SIGN} = "true" ]; then
   ./vendor/mediatek/proprietary/scripts/sign-modem/sign_modem.sh
   ./vendor/mediatek/proprietary/scripts/sign-image/sign_image.sh
   echo ">>>签名已完成"
-elif
+else
   echo ">>>此项目无须签名"
 fi
 
