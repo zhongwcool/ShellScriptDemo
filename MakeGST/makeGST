@@ -3,11 +3,15 @@
 # Author 
 #       Alex.zhong
 # Last Modified Date
-#       2015-12-04
+#       2015-12-11
 # Version
-#       2.0.0
+#       2.1.0 beta
 #
 # Change Log
+# 2.1.0
+#       1.Fix an issue that could prevent d5 or d3 build error after performed a update-api option
+#       2.Add feature to generate android studio project file when need
+#       3.Add feature to print stage info
 # 2.0.0
 #       1.Add feature: ONE-KEY to ImageBin
 #       2.Support for flex2
@@ -22,7 +26,7 @@
 # 1.1.1
 #       upgrade for project d5
 # 1.1.0
-#	    大幅提升了打包的速度约50%
+#	大幅提升了打包的速度约50%
 # 1.0.0 
 #       精简ImageBin的打包内容
 ################################################################
@@ -32,30 +36,28 @@ echo "################################################################"
 echo "# Author "
 echo "#       Alex.zhong"
 echo "# Last Modified Date" 
-echo "#       2015-12-04"
+echo "#       2015-12-11"
 echo "# Version "
-echo "#       2.0.0"
-echo "# New feature "
-echo "#       Now you can finish compiling and packaging image at "
+echo "#       2.1.0"
+echo "# Notes "
+echo "#       Now you can finish compiling and image packaging at "
 echo "#       one time by following command: "
-echo "#       ./makeGST or sh makeGST"
+echo "#       ./makeGST"
 echo "################################################################"
 
-# define funtion check_error
-check_error () {
-  if [ $1 != 0 ]
-  then
-    echo "您的编译出错了，快去检查build.log！"
-    exit $1
-  fi
-}
+#######################################################################
+# 
+# Feature Option Area
+#
+#######################################################################
 
 # define feature option
+PROJECT_DAFAULT=d5
+
+PROJECT_PATH=$(cd "$(dirname "$0")"; pwd)
+
 CORES=`grep -c ^processor /proc/cpuinfo`
 JOBS="-j$(($CORES * 2))"
-
-PROJECT_DAFAULT=d5
-PROJECT_PATH=$(cd "$(dirname "$0")"; pwd)
 
 OPTION_SIGN=true
 OPTION_UPDATE=false
@@ -64,6 +66,38 @@ OPTION_NEW=false
 CUSTOMIZATION="CIS_Open"
 BUILD_TYPE="eng"
 
+#######################################################################
+# 
+# Function Area
+#
+#######################################################################
+# define funtion
+check_error () {
+  if [ $1 != 0 ]
+  then
+    echo "编译出错了，可以检查build.log！"
+    exit $1
+  fi
+}
+
+restore_kernal () {
+  cd out/target
+  git reset --hard HEAD
+  cd ../../
+}
+
+print_stage () {
+  echo "################################################################"
+  echo "#                                                              #"
+  echo "#   $1"
+  echo "#                                                              #"
+  echo "################################################################"
+}
+#######################################################################
+# 
+# Shell Script Handle Area
+#
+#######################################################################
 # shell script parameter support
 if [ $# -ge 1 ]; then
   for op in $*
@@ -73,13 +107,13 @@ if [ $# -ge 1 ]; then
 	#echo ">>>>We will not sign the project image again."
 	OPTION_SIGN=false;;
       "update") 
-	#echo ">>>>We will perform update api."
+	#echo ">>>>update api."
 	OPTION_UPDATE=true;;
       "api") 
-	#echo ">>>>We will perform update api."
+	#echo ">>>>update api."
 	OPTION_UPDATE=true;;
       "new") 
-	#echo ">>>>We will perform completely full compile."
+	#echo ">>>>completely full compile."
 	OPTION_NEW=true
         OPTION_UPDATE=true;;
       *) 
@@ -89,6 +123,11 @@ if [ $# -ge 1 ]; then
   done
 fi
 
+#######################################################################
+# 
+# Compile Area
+#
+#######################################################################
 echo -n "1、请输入项目名[eg:${PROJECT_DAFAULT}]:"
 read PROJECT
 
@@ -98,16 +137,16 @@ if [ -z ${PROJECT} ]; then
   #exit 1
 fi
 
-echo ">>>执行: source build/envsetup.sh"
+print_stage "执行: source build/envsetup.sh"
 source build/envsetup.sh
 
-echo ">>>执行: lunch full_${PROJECT}-${BUILD_TYPE}"
+print_stage "执行: lunch full_${PROJECT}-${BUILD_TYPE}"
 lunch full_${PROJECT}-${BUILD_TYPE}
 check_error ${PIPESTATUS[0]}
 
 # make clean must perform before sed
 if [ ${OPTION_NEW} = "true" ]; then
-  echo ">>>执行: make clean"
+  print_stage "执行: make clean"
   make clean
   check_error ${PIPESTATUS[0]}
 fi
@@ -117,23 +156,44 @@ fi
 #sed -i 's/^\(D2_CUSTOMIZATION_VESION\s*=\s*\).*$/\1'${CUSTOMIZATION}'/' ./device/arima/${PROJECT}/ProjectConfig.mk
 #sed -i 's/^\(MTK_SIGNATURE_CUSTOMIZATION\s*=\s*\).*$/\1'yes'/'          ./device/arima/${PROJECT}/ProjectConfig.mk
 
+# UPDATE-API
 if [ ${OPTION_UPDATE} = "true" ]; then
-  echo ">>>执行: make ${JOBS} update-api 2>&1 | tee build.log"
+  print_stage "执行: make ${JOBS} update-api 2>&1 | tee build.log"
   make ${JOBS} update-api 2>&1 | tee build.log
   check_error ${PIPESTATUS[0]}
 fi
 
-echo ">>>执行: make ${JOBS} 2>&1 | tee build.log"
+# d5 need to restore kernal file from git server after update-api action
+if [ "d5" = ${PROJECT} ] || [ "d3" = ${PROJECT} ];then
+  restore_kernal
+fi
+
+# FULL COMPILE
+print_stage "执行: make ${JOBS} 2>&1 | tee build.log"
 make ${JOBS} 2>&1 | tee build.log
 check_error ${PIPESTATUS[0]}
 
+# ADD FOR ANDROID STUDIO
+if [ !-f android.ipr ]; then
+  print_stage "执行: mmm development/tools/idegen/"
+  echo ">>>生成Andoid Studio工程的配置文件"
+  mmm development/tools/idegen/
+  sh ./development/tools/idegen/idegen.sh
+fi
+
+# ADD FOR FLEX2
 if [ "d5" = ${PROJECT} ];then
+   print_stage  "perl vendor/LGE/build/flex/flex.pl ${PROJECT} global_com"
    echo ">>>设置flex环境"
-   echo ">>>perl vendor/LGE/build/flex/flex.pl ${PROJECT} global_com"
    perl vendor/LGE/build/flex/flex.pl ${PROJECT} global_com
 fi
 
 
+#######################################################################
+# 
+# Package Area
+#
+#######################################################################
 IMAGESET="ImageBin"
 IMAGETAR_PREFIX="ImageBin_${PROJECT}_"
 
@@ -142,162 +202,157 @@ if [ -d "${IMAGESET}" ]; then
 fi
 echo ""
 
-echo "2、删除旧文件"
+print_stage "2、删除旧文件"
 rm -rf ${IMAGETAR_PREFIX}*.tar.gz
 echo ">>>文件已删除"
 echo ""
 
-echo "3、文件清单"
+print_stage "3、项目签名"
+if [ ${OPTION_SIGN} = "true" ]; then
+  echo ">>>此项目需要签名，签名将花费约7~8分钟，请耐心等待"
+  ./vendor/mediatek/proprietary/scripts/sign-modem/sign_modem.sh
+  ./vendor/mediatek/proprietary/scripts/sign-image/sign_image.sh
+  echo ">>>签名已完成"
+elif
+  echo ">>>此项目无须签名"
+fi
+
+print_stage "4、文件清单"
 
 # add for v20
 if [ "v20" = ${PROJECT} ]; then
-
-  if [ ${OPTION_SIGN} = "true" ]; then
-     echo ">>>此项目需要签名。签名将花费约7~8分钟，请耐心等待"
-     ./vendor/mediatek/proprietary/scripts/sign-modem/sign_modem.sh
-     ./vendor/mediatek/proprietary/scripts/sign-image/sign_image.sh
-     echo ">>>签名已完成"
-  fi
-
   # do not need sign
 
   FILE_FLEX="out/target/product/${PROJECT}/flex.img"
-  echo ">>>FLEX\t\t文件： ${FILE_FLEX} "
+  echo ">>>FLEX      文件： ${FILE_FLEX} "
   FILE_FLEX="flex.img"
 
   FILE_SCATTER="out/target/product/${PROJECT}/MT6592_Android_scatter.txt"
-  echo ">>>SCATTER\t文件： ${FILE_SCATTER} "
+  echo ">>>SCATTER   文件： ${FILE_SCATTER} "
   FILE_SCATTER="MT6592_Android_scatter.txt" 
 
   FILE_PRELOADER="out/target/product/${PROJECT}/preloader_${PROJECT}.bin"
-  echo ">>>PRELOADER\t文件： ${FILE_PRELOADER} "
+  echo ">>>PRELOADER 文件： ${FILE_PRELOADER} "
   FILE_PRELOADER="preloader_${PROJECT}.bin"
 
   # need sign
 
   FILE="boot-sign.img"
   FILE_BOOT="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>BOOT\t\t文件： ${FILE_BOOT} "
+  echo ">>>BOOT      文件： ${FILE_BOOT} "
   FILE_BOOT=${FILE}
   
   FILE="cache-sign.img"
   FILE_CACHE="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>CACHE\t文件： ${FILE_CACHE} "
+  echo ">>>CACHE     文件： ${FILE_CACHE} "
   FILE_CACHE=${FILE}
 
   FILE="lk-sign.bin"
   FILE_LK="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>LK\t\t文件： ${FILE_LK} "
+  echo ">>>LK        文件： ${FILE_LK} "
   FILE_LK=${FILE}
 
   FILE="logo-sign.bin"
   FILE_LOGO="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>LOGO\t\t文件： ${FILE_LOGO} "
+  echo ">>>LOGO      文件： ${FILE_LOGO} "
   FILE_LOGO=${FILE}
 
   FILE="recovery-sign.img"
   FILE_RECOVERY="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>RECOVERY\t文件： ${FILE_RECOVERY} "
+  echo ">>>RECOVERY  文件： ${FILE_RECOVERY} "
   FILE_RECOVERY=${FILE}
 
   FILE="secro-sign.img"
   FILE_SECRO="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>SECRO\t文件： ${FILE_SECRO} "
+  echo ">>>SECRO     文件： ${FILE_SECRO} "
   FILE_SECRO=${FILE}
 
   FILE="system-sign.img"
   FILE_SYSTEM="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>SYSTEM\t文件： ${FILE_SYSTEM} "
+  echo ">>>SYSTEM    文件： ${FILE_SYSTEM} "
   FILE_SYSTEM=${FILE}
 
   FILE="userdata-sign.img"
   FILE_USERDATA="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>USERDATA\t文件： ${FILE_USERDATA} "
+  echo ">>>USERDATA  文件： ${FILE_USERDATA} "
   FILE_USERDATA=${FILE}
 
   FILE="MBR-sign"
   FILE_MBR="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>MBR\t\t文件： ${FILE_MBR} "
+  echo ">>>MBR       文件： ${FILE_MBR} "
   FILE_MBR=${FILE}
 
   FILE="EBR1-sign"
   FILE_EBR1="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>EBR1\t\t文件： ${FILE_EBR1} "
+  echo ">>>EBR1      文件： ${FILE_EBR1} "
   FILE_EBR1=${FILE}
 
   FILE="EBR2-sign"
   FILE_EBR2="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>EBR2\t\t文件： ${FILE_EBR2} "
+  echo ">>>EBR2      文件： ${FILE_EBR2} "
   FILE_EBR2=${FILE}
 
 elif [ "d5" = ${PROJECT} ] || [ "d3" = ${PROJECT} ]; then
-  
-  if [ ${OPTION_SIGN} = "true" ]; then
-     echo ">>>此项目需要签名。签名将花费约7~8分钟，请耐心等待"
-     ./vendor/mediatek/proprietary/scripts/sign-modem/sign_modem.sh
-     ./vendor/mediatek/proprietary/scripts/sign-image/sign_image.sh
-     echo ">>>签名已完成"
-  fi
-  
+ 
   # do not need sign
   
   FILE_FLEX="out/target/product/${PROJECT}/flex.img"
-  echo ">>>FLEX\t\t文件： ${FILE_FLEX} "
+  echo ">>>FLEX      文件： ${FILE_FLEX} "
   FILE_FLEX="flex.img"
 
   FILE_SCATTER="out/target/product/${PROJECT}/MT6580_Android_scatter.txt"
-  echo ">>>SCATTER\t文件： ${FILE_SCATTER} "
+  echo ">>>SCATTER   文件： ${FILE_SCATTER} "
   FILE_SCATTER="MT6580_Android_scatter.txt"
 
   FILE_PRELOADER="out/target/product/${PROJECT}/preloader_${PROJECT}.bin"
-  echo ">>>PRELOADER\t文件： ${FILE_PRELOADER} "
+  echo ">>>PRELOADER 文件： ${FILE_PRELOADER} "
   FILE_PRELOADER="preloader_${PROJECT}.bin"
   
   # need sign
   FILE="boot-sign.img"
   FILE_BOOT="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>BOOT\t\t文件： ${FILE_BOOT} "
+  echo ">>>BOOT      文件： ${FILE_BOOT} "
   FILE_BOOT=${FILE}
   
   FILE="cache-sign.img"
   FILE_CACHE="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>CACHE\t文件： ${FILE_CACHE} "
+  echo ">>>CACHE     文件： ${FILE_CACHE} "
   FILE_CACHE=${FILE}
 
   FILE="lk-sign.bin"
   FILE_LK="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>LK\t\t文件： ${FILE_LK} "
+  echo ">>>LK        文件： ${FILE_LK} "
   FILE_LK=${FILE}
 
   FILE="logo-sign.bin"
   FILE_LOGO="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>LOGO\t\t文件： ${FILE_LOGO} "
+  echo ">>>LOGO      文件： ${FILE_LOGO} "
   FILE_LOGO=${FILE}
 
   FILE="recovery-sign.img"
   FILE_RECOVERY="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>RECOVERY\t文件： ${FILE_RECOVERY} "
+  echo ">>>RECOVERY  文件： ${FILE_RECOVERY} "
   FILE_RECOVERY=${FILE}
 
   FILE="secro-sign.img"
   FILE_SECRO="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>SECRO\t文件： ${FILE_SECRO} "
+  echo ">>>SECRO     文件： ${FILE_SECRO} "
   FILE_SECRO=${FILE}
 
   FILE="system-sign.img"
   FILE_SYSTEM="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>SYSTEM\t文件： ${FILE_SYSTEM} "
+  echo ">>>SYSTEM    文件： ${FILE_SYSTEM} "
   FILE_SYSTEM=${FILE}
 
   FILE="userdata-sign.img"
   FILE_USERDATA="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>USERDATA\t文件： ${FILE_USERDATA} "
+  echo ">>>USERDATA  文件： ${FILE_USERDATA} "
   FILE_USERDATA=${FILE}
 fi
 
 echo ""
 
-echo "4、文件压缩"
+print_stage "5、文件压缩"
 echo ">>>开始压缩.."
 TARDATE=`date +%Y%m%d-%H%M`
 #cd ${IMAGESET}
@@ -312,5 +367,5 @@ fi
 
 echo ""
 
-echo "5、完成"
+print_stage "6、完成"
 echo ">>>目标文件: ${TARFILE}"
