@@ -3,48 +3,39 @@
 # Author 
 #       Alex.zhong
 # Last Modified Date
-#       2015-12-11
+#       2016-06-17
 # Version
-#       2.1.2
+#       3.0.0
 #
 # Change Log
-# 2.1.1
-#       1.Fix an issue that will make build fail
-# 2.1.0
-#       1.Fix an issue that could prevent d5 or d3 build error after performed a update-api option
-#       2.Add feature to generate android studio project file when need
-#       3.Add feature to print stage info
-# 2.0.0
-#       1.Add feature: ONE-KEY to ImageBin
-#       2.Support for flex2
-#       3.Rename this tool: makeGST
+# 3.0.0
+#       1.增加对fp7 bd7 n8项目编译的支持.
+#       2.智能识别默认项目名.
+#       3.优化ImageBin命名规则以提升用户体验.
+# 1.3.1
+#       1.增加OTA编译支持.
 # 1.3.0
-#       Support for project d3
+#       1.新增正式版本发布功能;
+#       2.发布版本集成镜像快照.
 # 1.2.0
-#       1.Add feature: Signature for d5
-#       2.Support for parameter feature nosign
-# 1.1.2
-#       Support for project v20
-# 1.1.1
-#       upgrade for project d5
-# 1.1.0
-#	大幅提升了打包的速度约50%
+#       1.Add flex2 support;
+#       2.Save snapshot of codebase for release.
+# 1.1.0 
+#       Setup new ImageBin target path
 # 1.0.0 
-#       精简ImageBin的打包内容
+#       New Compile Script for Android M of D5
 ################################################################
 
-# print basic info of package tool
+# Print basic info of package tool
 echo "################################################################"
 echo "# Author "
 echo "#       Alex.zhong"
 echo "# Last Modified Date" 
-echo "#       2015-12-11"
+echo "#       2016-06-17"
 echo "# Version "
-echo "#       2.1.1"
+echo "#       3.0.0"
 echo "# Notes "
-echo "#       Now you can finish compiling and image packaging at "
-echo "#       one time by following command: "
-echo "#       ./makeGST"
+echo "#       现在更多的项目被支持!!!"
 echo "################################################################"
 
 #######################################################################
@@ -53,31 +44,46 @@ echo "################################################################"
 #
 #######################################################################
 
-# define feature option
-PROJECT_DAFAULT=d5
+# Declare feature option
+PROJECT_DAFAULT="d5"
+PROJECT_SUPPORT="fp7 bd7 n8 d5"
 
 PROJECT_PATH=$(cd "$(dirname "$0")"; pwd)
+PROJECT_CATEGORY=$(basename `pwd`)
+PROJECT_PLATFORM="MT6580"
 
 CORES=`grep -c ^processor /proc/cpuinfo`
 JOBS="-j$(($CORES * 2))"
 
-OPTION_SIGN=true
+OPTION_SIGN=false
 OPTION_UPDATE=false
 OPTION_NEW=false
+OPTION_RELEASE=false
+OPTION_OTA=false
+
+IS_FLEX_SUPPORT=false
+IS_MBR_SUPPORT=false
+IS_EBR1_SUPPORT=false
+IS_EBR2_SUPPORT=false
+IS_TEE1_SUPPORT=false
+IS_TEE2_SUPPORT=false
+IS_ADDON_SUPPORT=false
 
 CUSTOMIZATION="CIS_Open"
+#BUILD_TYPE="user"
+#BUILD_TYPE="userdebug"
 BUILD_TYPE="eng"
-
+VERSION_NAME="LGX210AT-00-V10c-GLOBAL-COM"
 #######################################################################
 # 
 # Function Area
 #
 #######################################################################
 # define funtion
-check_error () {
+CHECK_ERROR () {
   if [ $1 != 0 ]
   then
-    echo "编译出错了，可以检查build.log！"
+    echo "编译出错了，请检查build.log！"
     exit $1
   fi
 }
@@ -88,26 +94,23 @@ restore_kernal () {
   cd ../../
 }
 
-print_stage () {
-  echo "################################################################"
-  echo "#                                                              #"
+PRINT_STAGE () {
+  echo "###################################################################"
+  echo "#                                                                 #"
   echo "#   $1"
-  echo "#                                                              #"
-  echo "################################################################"
+  echo "#                                                                 #"
+  echo "###################################################################"
 }
 #######################################################################
 # 
-# Shell Script Handle Area
+# Shell Script Parameters Handle Area
 #
 #######################################################################
-# shell script parameter support
+# Shell script parameter support
 if [ $# -ge 1 ]; then
-  for op in $*
+  for op in $*;
   do
     case ${op} in
-      "nosign") 
-	#echo ">>>>We will not sign the project image again."
-	OPTION_SIGN=false;;
       "update") 
 	#echo ">>>>update api."
 	OPTION_UPDATE=true;;
@@ -118,6 +121,9 @@ if [ $# -ge 1 ]; then
 	#echo ">>>>completely full compile."
 	OPTION_NEW=true
         OPTION_UPDATE=true;;
+      "ota") 
+	#echo ">>>>OTA."
+        OPTION_OTA=true;;
       *) 
 	echo "${op} is not valid parameter!"
 	exit 1
@@ -127,247 +133,485 @@ fi
 
 #######################################################################
 # 
-# Compile Area
+# Prepare for Compile
 #
 #######################################################################
-echo -n "1、请输入项目名[eg:${PROJECT_DAFAULT}]:"
+for p in ${PROJECT_SUPPORT};
+  do
+    PROJECT_CATEGORY_T=$(echo ${PROJECT_CATEGORY} | sed 'y/ABCDEFGHIJKLMNOPQRSTUVWXYZ/abcdefghijklmnopqrstuvwxyz/')
+    if [[ ${PROJECT_CATEGORY_T} =~ $p ]]; then
+      PROJECT_DAFAULT=$p
+      break
+    fi
+  done
+
+echo -n "1、请输入项目名[default:${PROJECT_DAFAULT}, support: ${PROJECT_SUPPORT}]:"
 read PROJECT
 
 if [ -z ${PROJECT} ]; then
   echo ">>>未输入项目名！默认: ${PROJECT_DAFAULT}"
   PROJECT=${PROJECT_DAFAULT}
-  #exit 1
+else
+  IS_PROJECT_SUPPORT=false
+
+  for p in ${PROJECT_SUPPORT};
+  do
+    if [ ${PROJECT} == $p ]; then
+      PROJECT=$p
+      IS_PROJECT_SUPPORT=true
+      break
+    fi
+  done
+  
+  if [ ${IS_PROJECT_SUPPORT} == "false" ]; then
+    echo ">>>此脚本不支持编译项目:${PROJECT}，注意项目名大小写敏感！"
+    exit 1
+  fi
 fi
 
-print_stage "执行: source build/envsetup.sh"
+#Setup project build parameters
+PRINT_STAGE "设置项目编译参数"
+if [ ${PROJECT} == "d5" ]; then
+  PROJECT_PLATFORM="MT6580"
+  OPTION_SIGN=false
+  IS_FLEX_SUPPORT=true
+  IS_MBR_SUPPORT=false
+  IS_EBR1_SUPPORT=false
+  IS_EBR2_SUPPORT=false
+  IS_TEE1_SUPPORT=false
+  IS_TEE2_SUPPORT=false
+  IS_ADDON_SUPPORT=false
+elif [ ${PROJECT} == "bd7" ]; then
+  PROJECT_PLATFORM="MT8127"
+  OPTION_SIGN=true
+  IS_FLEX_SUPPORT=false
+  IS_MBR_SUPPORT=true
+  IS_EBR1_SUPPORT=true
+  IS_EBR2_SUPPORT=true
+  IS_TEE1_SUPPORT=true
+  IS_TEE2_SUPPORT=false
+  IS_ADDON_SUPPORT=true
+elif [ ${PROJECT} == "n8" ]; then
+  PROJECT_PLATFORM="MT8163"
+  OPTION_SIGN=true
+  IS_FLEX_SUPPORT=false
+  IS_MBR_SUPPORT=false
+  IS_EBR1_SUPPORT=false
+  IS_EBR2_SUPPORT=false
+  IS_TEE1_SUPPORT=true
+  IS_TEE2_SUPPORT=false
+  IS_ADDON_SUPPORT=true
+elif [ ${PROJECT} == "fp7" ]; then
+  PROJECT_PLATFORM="MT8163"
+  OPTION_SIGN=true
+  IS_FLEX_SUPPORT=false
+  IS_MBR_SUPPORT=false
+  IS_EBR1_SUPPORT=false
+  IS_EBR2_SUPPORT=false
+  IS_TEE1_SUPPORT=true
+  IS_TEE2_SUPPORT=false
+  IS_ADDON_SUPPORT=true
+fi
+
+if [ ${PROJECT} == "n8" ] || [ ${PROJECT} == "fp7" ]; then
+  PRINT_STAGE "Setup Audio parameters"
+  cp -rv vendor/mediatek/proprietary/custom/${PROJECT}_audio/. vendor/mediatek/proprietary/custom/common/cgen/cfgdefault
+fi
+
+BUILD_NUMBER=`date +%j`
+sed -i 's/^\(BUILD_NUMBER\s*:=\s*\).*$/\1'${BUILD_NUMBER}'/' device/mediatek/common/BoardConfig.mk
+if [ ${PROJECT} == "n8" ];then
+  sed -i 's/^\(NABI_FIRMWARE_VERSION\s*:=\s*\).*$/\1'${BUILD_NUMBER}'/' vendor/fuhu/FuhuConfig-NBV208HMKG-US.mk
+elif [ ${PROJECT} == "fp7" ]; then
+  sed -i 's/^\(NABI_FIRMWARE_VERSION\s*:=\s*\).*$/\1'${BUILD_NUMBER}'/' vendor/fuhu/FuhuConfig-NBFP07PMKG-US-FP.mk
+elif [ ${PROJECT} == "bd7" ]; then
+  sed -i 's/^\(NABI_FIRMWARE_VERSION\s*:=\s*\).*$/\1'${BUILD_NUMBER}'/' vendor/fuhu/FuhuConfig.mk
+fi
+
+VERSION=`date +%Y%m%d.%H%M%S`
+BUILD_VERSION="MTK_BUILD_VERNO=${VERSION}"
+sed -i 's/^\(MTK_BUILD_VERNO\s*=\s*\).*$/\1'${BUILD_VERSION}'/' device/arima/${PROJECT}/ProjectConfig.mk
+
+PRINT_STAGE "执行: source build/envsetup.sh"
 source build/envsetup.sh
 
-print_stage "执行: lunch full_${PROJECT}-${BUILD_TYPE}"
+PRINT_STAGE "执行: lunch full_${PROJECT}-${BUILD_TYPE}"
 lunch full_${PROJECT}-${BUILD_TYPE}
-check_error ${PIPESTATUS[0]}
+CHECK_ERROR ${PIPESTATUS[0]}
 
 # make clean must perform before sed
 if [ ${OPTION_NEW} = "true" ]; then
-  print_stage "执行: make clean"
+  PRINT_STAGE "执行: make clean"
   make clean
-  check_error ${PIPESTATUS[0]}
+  CHECK_ERROR ${PIPESTATUS[0]}
 fi
 
-# build signed image version
-#echo ">>>设置编译参数"
-#sed -i 's/^\(D2_CUSTOMIZATION_VESION\s*=\s*\).*$/\1'${CUSTOMIZATION}'/' ./device/arima/${PROJECT}/ProjectConfig.mk
-#sed -i 's/^\(MTK_SIGNATURE_CUSTOMIZATION\s*=\s*\).*$/\1'yes'/'          ./device/arima/${PROJECT}/ProjectConfig.mk
-
+#######################################################################
+# 
+# Start Compiling Task
+#
+#######################################################################
 # UPDATE-API
 if [ ${OPTION_UPDATE} = "true" ]; then
-  print_stage "执行: make ${JOBS} update-api 2>&1 | tee build.log"
+  PRINT_STAGE "执行: make ${JOBS} update-api 2>&1 | tee build.log"
   make ${JOBS} update-api 2>&1 | tee build.log
-  check_error ${PIPESTATUS[0]}
+  CHECK_ERROR ${PIPESTATUS[0]}
 fi
 
 # d5 need to restore kernal file from git server after update-api action
-if [ "d5" = ${PROJECT} ] || [ "d3" = ${PROJECT} ];then
-  restore_kernal
+#if [ "d5" = ${PROJECT} ] || [ "d3" = ${PROJECT} ];then
+#  PRINT_STAGE "Restore Kernal file"
+#  restore_kernal
+#fi
+
+# Full compile
+if [ ${OPTION_UPDATE} = "true" ]; then
+  PRINT_STAGE "执行: make ${JOBS} 2>&1 | tee -a build.log"
+  make ${JOBS} 2>&1 | tee -a build.log
+  CHECK_ERROR ${PIPESTATUS[0]}
+else
+  PRINT_STAGE "执行: make ${JOBS} 2>&1 | tee build.log"
+  make ${JOBS} 2>&1 | tee build.log
+  CHECK_ERROR ${PIPESTATUS[0]}
 fi
 
-# FULL COMPILE
-print_stage "执行: make ${JOBS} 2>&1 | tee build.log"
-make ${JOBS} 2>&1 | tee build.log
-check_error ${PIPESTATUS[0]}
+# OTA package
+if [ ${OPTION_OTA} = "true" ]; then
+  PRINT_STAGE "执行: make otapackage"
+  make otapackage
+  CHECK_ERROR ${PIPESTATUS[0]}
+  # move the ota
+  mv out/target/product/${PROJECT}/full_${PROJECT}-ota-*.zip ./../
+fi
 
-# ADD FOR ANDROID STUDIO
+# Generate configuration file for Android Studio
 if [ ! -f android.ipr ]; then
-  print_stage "执行: mmm development/tools/idegen/"
+  PRINT_STAGE "执行: mmm development/tools/idegen/"
   echo ">>>生成Andoid Studio工程的配置文件"
   mmm development/tools/idegen/
   sh ./development/tools/idegen/idegen.sh
 fi
 
-# ADD FOR FLEX2
-if [ "d5" = ${PROJECT} ];then
-   print_stage  "perl vendor/LGE/build/flex/flex.pl ${PROJECT} global_com"
+# Generate flex image
+if [ "true" = ${IS_FLEX_SUPPORT} ]; then
+   PRINT_STAGE  "perl vendor/LGE/build/flex/flex.pl ${PROJECT} global_com"
    echo ">>>设置flex环境"
    perl vendor/LGE/build/flex/flex.pl ${PROJECT} global_com
 fi
 
-
+# Save snapshot of codebase for release
+FILE_SNAPSHOT="`date +%Y%m%d-%H%M`.xml"
+PRINT_STAGE "执行: repo manifest -r -o .repo/manifests/${FILE_SNAPSHOT}"
+repo manifest -r -o .repo/manifests/${FILE_SNAPSHOT}
 #######################################################################
 # 
 # Package Area
 #
 #######################################################################
 IMAGESET="ImageBin"
-IMAGETAR_PREFIX="ImageBin_${PROJECT}_"
+IMAGETAR_PREFIX="ImageBin_${PROJECT_CATEGORY}_"
 
-if [ -d "${IMAGESET}" ]; then
-  rm -rf "${IMAGESET}"
-fi
-echo ""
-
-print_stage "2、删除旧文件"
-rm -rf ${IMAGETAR_PREFIX}*.tar.gz
+# Remove old image file
+PRINT_STAGE "2、删除旧文件"
+rm -rvf ./../${IMAGETAR_PREFIX}*.tar
 echo ">>>文件已删除"
 echo ""
 
-print_stage "3、项目签名"
+# Signature
+PRINT_STAGE "3、项目签名"
 if [ ${OPTION_SIGN} = "true" ]; then
-  echo ">>>此项目需要签名，签名将花费约7~8分钟，请耐心等待"
-  ./vendor/mediatek/proprietary/scripts/sign-modem/sign_modem.sh
+  echo ">>>此项目需要签名。签名将花费约x分钟，请耐心等待"
+  SIGNCOST=$(date +%s)
   ./vendor/mediatek/proprietary/scripts/sign-image/sign_image.sh
+  SIGNCOST=$((`date +%s`-SIGNCOST))
+  echo ${SIGNCOST} > ./SIGNCOST.txt
   echo ">>>签名已完成"
 else
-  echo ">>>此项目无须签名"
+  echo ">>>此项目无需签名。"
 fi
 
-print_stage "4、文件清单"
-
-# add for v20
-if [ "v20" = ${PROJECT} ]; then
-  # do not need sign
-
-  FILE_FLEX="out/target/product/${PROJECT}/flex.img"
-  echo ">>>FLEX      文件： ${FILE_FLEX} "
-  FILE_FLEX="flex.img"
-
-  FILE_SCATTER="out/target/product/${PROJECT}/MT6592_Android_scatter.txt"
-  echo ">>>SCATTER   文件： ${FILE_SCATTER} "
-  FILE_SCATTER="MT6592_Android_scatter.txt" 
-
-  FILE_PRELOADER="out/target/product/${PROJECT}/preloader_${PROJECT}.bin"
-  echo ">>>PRELOADER 文件： ${FILE_PRELOADER} "
-  FILE_PRELOADER="preloader_${PROJECT}.bin"
-
-  # need sign
-
-  FILE="boot-sign.img"
-  FILE_BOOT="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>BOOT      文件： ${FILE_BOOT} "
-  FILE_BOOT=${FILE}
-  
-  FILE="cache-sign.img"
-  FILE_CACHE="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>CACHE     文件： ${FILE_CACHE} "
-  FILE_CACHE=${FILE}
-
-  FILE="lk-sign.bin"
-  FILE_LK="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>LK        文件： ${FILE_LK} "
-  FILE_LK=${FILE}
-
-  FILE="logo-sign.bin"
-  FILE_LOGO="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>LOGO      文件： ${FILE_LOGO} "
-  FILE_LOGO=${FILE}
-
-  FILE="recovery-sign.img"
-  FILE_RECOVERY="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>RECOVERY  文件： ${FILE_RECOVERY} "
-  FILE_RECOVERY=${FILE}
-
-  FILE="secro-sign.img"
-  FILE_SECRO="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>SECRO     文件： ${FILE_SECRO} "
-  FILE_SECRO=${FILE}
-
-  FILE="system-sign.img"
-  FILE_SYSTEM="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>SYSTEM    文件： ${FILE_SYSTEM} "
-  FILE_SYSTEM=${FILE}
-
-  FILE="userdata-sign.img"
-  FILE_USERDATA="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>USERDATA  文件： ${FILE_USERDATA} "
-  FILE_USERDATA=${FILE}
-
-  FILE="MBR-sign"
-  FILE_MBR="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>MBR       文件： ${FILE_MBR} "
-  FILE_MBR=${FILE}
-
-  FILE="EBR1-sign"
-  FILE_EBR1="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>EBR1      文件： ${FILE_EBR1} "
-  FILE_EBR1=${FILE}
-
-  FILE="EBR2-sign"
-  FILE_EBR2="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>EBR2      文件： ${FILE_EBR2} "
-  FILE_EBR2=${FILE}
-
-elif [ "d5" = ${PROJECT} ] || [ "d3" = ${PROJECT} ]; then
+# Show Manifest of Image
+PRINT_STAGE "4、文件清单"
  
   # do not need sign
+  #FILE_SNAPSHOT=".repo/manifests/{FILE_SNAPSHOT}"
+  echo ">>>SNAPSHOT  文件： .repo/manifests/${FILE_SNAPSHOT}"
   
-  FILE_FLEX="out/target/product/${PROJECT}/flex.img"
-  echo ">>>FLEX      文件： ${FILE_FLEX} "
-  FILE_FLEX="flex.img"
+  if [ "true" = ${IS_FLEX_SUPPORT} ]; then
+    FILE_FLEX="out/target/product/${PROJECT}/flex.img"
+    echo ">>>FLEX      文件： ${FILE_FLEX} "
+    FILE_FLEX="flex.img"
+  fi
 
-  FILE_SCATTER="out/target/product/${PROJECT}/MT6580_Android_scatter.txt"
+  FILE_SCATTER="out/target/product/${PROJECT}/${PROJECT_PLATFORM}_Android_scatter.txt"
   echo ">>>SCATTER   文件： ${FILE_SCATTER} "
-  FILE_SCATTER="MT6580_Android_scatter.txt"
+  FILE_SCATTER="${PROJECT_PLATFORM}_Android_scatter.txt"
 
   FILE_PRELOADER="out/target/product/${PROJECT}/preloader_${PROJECT}.bin"
   echo ">>>PRELOADER 文件： ${FILE_PRELOADER} "
   FILE_PRELOADER="preloader_${PROJECT}.bin"
   
-  # need sign
-  FILE="boot-sign.img"
-  FILE_BOOT="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>BOOT      文件： ${FILE_BOOT} "
-  FILE_BOOT=${FILE}
+  if [ ${OPTION_SIGN} = "true" ]; then
+    # need sign
+    FILE="boot-sign.img"
+    FILE_BOOT="out/target/product/${PROJECT}/signed_bin/${FILE}"
+    echo ">>>BOOT      文件： ${FILE_BOOT} "
+    FILE_BOOT=${FILE}
   
-  FILE="cache-sign.img"
-  FILE_CACHE="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>CACHE     文件： ${FILE_CACHE} "
-  FILE_CACHE=${FILE}
+    FILE="cache-sign.img"
+    FILE_CACHE="out/target/product/${PROJECT}/signed_bin/${FILE}"
+    echo ">>>CACHE     文件： ${FILE_CACHE} "
+    FILE_CACHE=${FILE}
 
-  FILE="lk-sign.bin"
-  FILE_LK="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>LK        文件： ${FILE_LK} "
-  FILE_LK=${FILE}
+    FILE="lk-sign.bin"
+    FILE_LK="out/target/product/${PROJECT}/signed_bin/${FILE}"
+    echo ">>>LK        文件： ${FILE_LK} "
+    FILE_LK=${FILE}
 
-  FILE="logo-sign.bin"
-  FILE_LOGO="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>LOGO      文件： ${FILE_LOGO} "
-  FILE_LOGO=${FILE}
+    FILE="logo-sign.bin"
+    FILE_LOGO="out/target/product/${PROJECT}/signed_bin/${FILE}"
+    echo ">>>LOGO      文件： ${FILE_LOGO} "
+    FILE_LOGO=${FILE}
 
-  FILE="recovery-sign.img"
-  FILE_RECOVERY="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>RECOVERY  文件： ${FILE_RECOVERY} "
-  FILE_RECOVERY=${FILE}
+    FILE="recovery-sign.img"
+    FILE_RECOVERY="out/target/product/${PROJECT}/signed_bin/${FILE}"
+    echo ">>>RECOVERY  文件： ${FILE_RECOVERY} "
+    FILE_RECOVERY=${FILE}
 
-  FILE="secro-sign.img"
-  FILE_SECRO="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>SECRO     文件： ${FILE_SECRO} "
-  FILE_SECRO=${FILE}
+    FILE="secro-sign.img"
+    FILE_SECRO="out/target/product/${PROJECT}/signed_bin/${FILE}"
+    echo ">>>SECRO     文件： ${FILE_SECRO} "
+    FILE_SECRO=${FILE}
 
-  FILE="system-sign.img"
-  FILE_SYSTEM="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>SYSTEM    文件： ${FILE_SYSTEM} "
-  FILE_SYSTEM=${FILE}
+    FILE="system-sign.img"
+    FILE_SYSTEM="out/target/product/${PROJECT}/signed_bin/${FILE}"
+    echo ">>>SYSTEM    文件： ${FILE_SYSTEM} "
+    FILE_SYSTEM=${FILE}
 
-  FILE="userdata-sign.img"
-  FILE_USERDATA="out/target/product/${PROJECT}/signed_bin/${FILE}"
-  echo ">>>USERDATA  文件： ${FILE_USERDATA} "
-  FILE_USERDATA=${FILE}
-fi
+    FILE="userdata-sign.img"
+    FILE_USERDATA="out/target/product/${PROJECT}/signed_bin/${FILE}"
+    echo ">>>USERDATA  文件： ${FILE_USERDATA} "
+    FILE_USERDATA=${FILE}
+    
+    if [ "true" = ${IS_MBR_SUPPORT} ]; then
+    FILE="MBR-sign.img"
+    FILE_MBR="out/target/product/${PROJECT}/signed_bin/${FILE}"
+    echo ">>>MBR       文件： ${FILE_MBR} "
+    FILE_MBR=${FILE}
+    fi
+
+    if [ "true" = ${IS_EBR1_SUPPORT} ]; then
+    FILE="EBR1-sign.img"
+    FILE_EBR1="out/target/product/${PROJECT}/signed_bin/${FILE}"
+    echo ">>>EBR1      文件： ${FILE_EBR1} "
+    FILE_EBR1=${FILE}
+    fi
+
+    if [ "true" = ${IS_EBR2_SUPPORT} ]; then
+    FILE="EBR2-sign.img"
+    FILE_EBR2="out/target/product/${PROJECT}/signed_bin/${FILE}"
+    echo ">>>EBR2      文件： ${FILE_EBR2} "
+    FILE_EBR2=${FILE}
+    fi
+
+    if [ "true" = ${IS_TEE1_SUPPORT} ]; then
+    FILE="tz-sign.img"
+    FILE_TEE1="out/target/product/${PROJECT}/signed_bin/${FILE}"
+    echo ">>>TEE1      文件： ${FILE_TEE1} "
+    FILE_TEE1=${FILE}
+    fi
+
+    if [ "true" = ${IS_TEE2_SUPPORT} ]; then
+    FILE="tz-sign.img"
+    FILE_TEE2="out/target/product/${PROJECT}/signed_bin/${FILE}"
+    echo ">>>TEE2      文件： ${FILE_TEE2} "
+    FILE_TEE2=${FILE}
+    fi
+
+    if [ "true" = ${IS_ADDON_SUPPORT} ]; then
+      if [ ${PROJECT} == "bd7" ]; then
+        FILE="addon-sign.img"
+        FILE_ADDON="out/target/product/${PROJECT}/signed_bin/${FILE}"
+      else
+        FILE="addon.img"
+        FILE_ADDON="out/target/product/${PROJECT}/${FILE}"
+      fi
+      echo ">>>ADDON    文件： ${FILE_ADDON} "
+      FILE_ADDON=${FILE}
+    fi
+  else
+    FILE="boot.img"
+    FILE_BOOT="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>BOOT      文件： ${FILE_BOOT} "
+    FILE_BOOT=${FILE}
+  
+    FILE="cache.img"
+    FILE_CACHE="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>CACHE     文件： ${FILE_CACHE} "
+    FILE_CACHE=${FILE}
+
+    FILE="lk.bin"
+    FILE_LK="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>LK        文件： ${FILE_LK} "
+    FILE_LK=${FILE}
+
+    FILE="logo.bin"
+    FILE_LOGO="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>LOGO      文件： ${FILE_LOGO} "
+    FILE_LOGO=${FILE}
+
+    FILE="recovery.img"
+    FILE_RECOVERY="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>RECOVERY  文件： ${FILE_RECOVERY} "
+    FILE_RECOVERY=${FILE}
+
+    FILE="secro.img"
+    FILE_SECRO="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>SECRO     文件： ${FILE_SECRO} "
+    FILE_SECRO=${FILE}
+
+    FILE="system.img"
+    FILE_SYSTEM="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>SYSTEM    文件： ${FILE_SYSTEM} "
+    FILE_SYSTEM=${FILE}
+
+    FILE="userdata.img"
+    FILE_USERDATA="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>USERDATA  文件： ${FILE_USERDATA} "
+    FILE_USERDATA=${FILE}
+
+    if [ "true" = ${IS_MBR_SUPPORT} ]; then
+    FILE="MBR.img"
+    FILE_MBR="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>MBR       文件： ${FILE_MBR} "
+    FILE_MBR=${FILE}
+    fi
+
+    if [ "true" = ${IS_EBR1_SUPPORT} ]; then
+    FILE="EBR1.img"
+    FILE_EBR1="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>EBR1      文件： ${FILE_EBR1} "
+    FILE_EBR1=${FILE}
+    fi
+
+    if [ "true" = ${IS_EBR2_SUPPORT} ]; then
+    FILE="EBR2.img"
+    FILE_EBR2="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>EBR2      文件： ${FILE_EBR2} "
+    FILE_EBR2=${FILE}
+    fi
+
+    if [ "true" = ${IS_TEE1_SUPPORT} ]; then
+    FILE="tz.img"
+    FILE_TEE1="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>TEE1      文件： ${FILE_TEE1} "
+    FILE_TEE1=${FILE}
+    fi
+
+    if [ "true" = ${IS_TEE2_SUPPORT} ]; then
+    FILE="tz.img"
+    FILE_TEE2="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>TEE2      文件： ${FILE_TEE2} "
+    FILE_TEE2=${FILE}
+    fi
+
+    if [ "true" = ${IS_ADDON_SUPPORT} ]; then
+    FILE="addon.img"
+    FILE_ADDON="out/target/product/${PROJECT}/${FILE}"
+    echo ">>>ADDON     文件： ${FILE_ADDON} "
+    FILE_ADDON=${FILE}
+    fi
+  fi
 
 echo ""
 
-print_stage "5、文件压缩"
+# Compress image
+PRINT_STAGE "5、文件压缩"
 echo ">>>开始压缩.."
 TARDATE=`date +%Y%m%d-%H%M`
-#cd ${IMAGESET}
-TARFILE=${IMAGETAR_PREFIX}${TARDATE}.tar.gz
+TARFILE=${IMAGETAR_PREFIX}${TARDATE}.tar
 
-# compress the image bin
-if [ "v20" = ${PROJECT} ]; then
-  tar czvf ${PROJECT_PATH}/${TARFILE} -C "out/target/product/${PROJECT}/" ${FILE_FLEX}  ${FILE_SCATTER} ${FILE_PRELOADER} -C "signed_bin" ${FILE_BOOT} ${FILE_CACHE} ${FILE_LK} ${FILE_LOGO} ${FILE_RECOVERY} ${FILE_SECRO} ${FILE_SYSTEM} ${FILE_USERDATA} ${FILE_MBR} ${FILE_EBR1} ${FILE_EBR2}
-elif [ "d5" = ${PROJECT} ] || [ "d3" = ${PROJECT} ]; then
-  tar czvf ${PROJECT_PATH}/${TARFILE} -C "out/target/product/${PROJECT}/" ${FILE_FLEX}  ${FILE_SCATTER} ${FILE_PRELOADER} -C "signed_bin" ${FILE_BOOT} ${FILE_CACHE} ${FILE_LK} ${FILE_LOGO} ${FILE_RECOVERY} ${FILE_SECRO} ${FILE_SYSTEM} ${FILE_USERDATA} 
+if [ ${OPTION_SIGN} = "true" ]; then
+  tar cvf ${PROJECT_PATH}/../${TARFILE} -C ".repo/manifests/" ${FILE_SNAPSHOT} \
+                                        -C "../../out/target/product/${PROJECT}/" ${FILE_SCATTER} ${FILE_PRELOADER} \
+                                        -C "signed_bin" ${FILE_BOOT} ${FILE_CACHE} ${FILE_LK} ${FILE_LOGO} ${FILE_RECOVERY} ${FILE_SECRO}\
+                                           ${FILE_SYSTEM} ${FILE_USERDATA}
+
+  if [ "true" = ${IS_FLEX_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_FLEX}
+  fi
+
+  if [ "true" = ${IS_MBR_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_MBR}
+  fi
+
+  if [ "true" = ${IS_EBR1_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_EBR1}
+  fi
+
+  if [ "true" = ${IS_EBR2_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_EBR2}
+  fi
+
+  if [ "true" = ${IS_TEE1_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_TEE1}
+  fi
+
+  if [ "true" = ${IS_TEE2_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_TEE2}
+  fi
+
+  if [ "true" = ${IS_ADDON_SUPPORT} ]; then
+    if [ ${PROJECT} == "bd7" ]; then
+    tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_ADDON}
+    else
+    tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_ADDON}
+    fi
+  fi
+else
+  tar czvf ${PROJECT_PATH}/../${TARFILE} -C ".repo/manifests/" ${FILE_SNAPSHOT} \
+                                         -C "../../out/target/product/${PROJECT}/" ${FILE_SCATTER} ${FILE_PRELOADER} ${FILE_BOOT} \
+                                             ${FILE_CACHE} ${FILE_LK} ${FILE_LOGO} ${FILE_RECOVERY} ${FILE_SECRO} ${FILE_SYSTEM} ${FILE_USERDATA}
+  
+  if [ "true" = ${IS_FLEX_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_FLEX}
+  fi
+
+  if [ "true" = ${IS_MBR_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_MBR}
+  fi
+
+  if [ "true" = ${IS_EBR1_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_EBR1}
+  fi
+
+  if [ "true" = ${IS_EBR2_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_EBR2}
+  fi
+
+  if [ "true" = ${IS_TEE1_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_TEE1}
+  fi
+
+  if [ "true" = ${IS_TEE2_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_TEE2}
+  fi
+
+  if [ "true" = ${IS_ADDON_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_ADDON}
+  fi
 fi
 
+# Change image name for official release
+if [ "true" = ${OPTION_RELEASE} ]; then
+  VERSION_NAME="${VERSION_NAME}-`date +%b-%d-%Y`.tar"
+  mv ${PROJECT_PATH}/../${TARFILE} ${PROJECT_PATH}/../${VERSION_NAME}
+  TARFILE=${VERSION_NAME}
+fi
 echo ""
 
-print_stage "6、完成"
+# Finish and Output
+PRINT_STAGE "6、完成"
 echo ">>>目标文件: ${TARFILE}"
+echo ""
+echo ""
