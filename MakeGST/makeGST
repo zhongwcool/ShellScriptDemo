@@ -5,9 +5,13 @@
 # Last Modified Date
 #       2016-06-17
 # Version
-#       3.0.0
+#       3.0.2
 #
 # Change Log
+# 3.0.2
+#       1.更新打包文件的信息.
+# 3.0.1
+#       1.修改非签名项目压缩出错的问题.
 # 3.0.0
 #       1.增加对fp7 bd7 n8项目编译的支持.
 #       2.智能识别默认项目名.
@@ -33,7 +37,7 @@ echo "#       Alex.zhong"
 echo "# Last Modified Date" 
 echo "#       2016-06-17"
 echo "# Version "
-echo "#       3.0.0"
+echo "#       3.0.2"
 echo "# Notes "
 echo "#       现在更多的项目被支持!!!"
 echo "################################################################"
@@ -71,8 +75,8 @@ IS_ADDON_SUPPORT=false
 
 CUSTOMIZATION="CIS_Open"
 #BUILD_TYPE="user"
-#BUILD_TYPE="userdebug"
-BUILD_TYPE="eng"
+BUILD_TYPE="userdebug"
+#BUILD_TYPE="eng"
 VERSION_NAME="LGX210AT-00-V10c-GLOBAL-COM"
 #######################################################################
 # 
@@ -170,7 +174,6 @@ else
 fi
 
 #Setup project build parameters
-PRINT_STAGE "设置项目编译参数"
 if [ ${PROJECT} == "d5" ]; then
   PROJECT_PLATFORM="MT6580"
   OPTION_SIGN=false
@@ -394,21 +397,21 @@ PRINT_STAGE "4、文件清单"
     FILE_USERDATA=${FILE}
     
     if [ "true" = ${IS_MBR_SUPPORT} ]; then
-    FILE="MBR-sign.img"
+    FILE="MBR-sign"
     FILE_MBR="out/target/product/${PROJECT}/signed_bin/${FILE}"
     echo ">>>MBR       文件： ${FILE_MBR} "
     FILE_MBR=${FILE}
     fi
 
     if [ "true" = ${IS_EBR1_SUPPORT} ]; then
-    FILE="EBR1-sign.img"
+    FILE="EBR1-sign"
     FILE_EBR1="out/target/product/${PROJECT}/signed_bin/${FILE}"
     echo ">>>EBR1      文件： ${FILE_EBR1} "
     FILE_EBR1=${FILE}
     fi
 
     if [ "true" = ${IS_EBR2_SUPPORT} ]; then
-    FILE="EBR2-sign.img"
+    FILE="EBR2-sign"
     FILE_EBR2="out/target/product/${PROJECT}/signed_bin/${FILE}"
     echo ">>>EBR2      文件： ${FILE_EBR2} "
     FILE_EBR2=${FILE}
@@ -429,11 +432,11 @@ PRINT_STAGE "4、文件清单"
     fi
 
     if [ "true" = ${IS_ADDON_SUPPORT} ]; then
+      FILE="addon.img"
       if [ ${PROJECT} == "bd7" ]; then
-        FILE="addon-sign.img"
-        FILE_ADDON="out/target/product/${PROJECT}/signed_bin/${FILE}"
-      else
         FILE="addon.img"
+        FILE_ADDON="out/target/product/${PROJECT}/${FILE}"
+      else
         FILE_ADDON="out/target/product/${PROJECT}/${FILE}"
       fi
       echo ">>>ADDON    文件： ${FILE_ADDON} "
@@ -481,21 +484,21 @@ PRINT_STAGE "4、文件清单"
     FILE_USERDATA=${FILE}
 
     if [ "true" = ${IS_MBR_SUPPORT} ]; then
-    FILE="MBR.img"
+    FILE="MBR"
     FILE_MBR="out/target/product/${PROJECT}/${FILE}"
     echo ">>>MBR       文件： ${FILE_MBR} "
     FILE_MBR=${FILE}
     fi
 
     if [ "true" = ${IS_EBR1_SUPPORT} ]; then
-    FILE="EBR1.img"
+    FILE="EBR1"
     FILE_EBR1="out/target/product/${PROJECT}/${FILE}"
     echo ">>>EBR1      文件： ${FILE_EBR1} "
     FILE_EBR1=${FILE}
     fi
 
     if [ "true" = ${IS_EBR2_SUPPORT} ]; then
-    FILE="EBR2.img"
+    FILE="EBR2"
     FILE_EBR2="out/target/product/${PROJECT}/${FILE}"
     echo ">>>EBR2      文件： ${FILE_EBR2} "
     FILE_EBR2=${FILE}
@@ -563,13 +566,13 @@ if [ ${OPTION_SIGN} = "true" ]; then
 
   if [ "true" = ${IS_ADDON_SUPPORT} ]; then
     if [ ${PROJECT} == "bd7" ]; then
-    tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_ADDON}
+    tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_ADDON}
     else
     tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_ADDON}
     fi
   fi
 else
-  tar czvf ${PROJECT_PATH}/../${TARFILE} -C ".repo/manifests/" ${FILE_SNAPSHOT} \
+  tar cvf ${PROJECT_PATH}/../${TARFILE} -C ".repo/manifests/" ${FILE_SNAPSHOT} \
                                          -C "../../out/target/product/${PROJECT}/" ${FILE_SCATTER} ${FILE_PRELOADER} ${FILE_BOOT} \
                                              ${FILE_CACHE} ${FILE_LK} ${FILE_LOGO} ${FILE_RECOVERY} ${FILE_SECRO} ${FILE_SYSTEM} ${FILE_USERDATA}
   
