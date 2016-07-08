@@ -3,11 +3,17 @@
 # Author 
 #       Alex.zhong
 # Last Modified Date
-#       2016-06-17
+#       2016-07-08
 # Version
-#       3.0.2
+#       3.1.0
 #
 # Change Log
+# 3.1.0
+#       1.优化log输出.
+#       2.增加对P9000和TH10的支持.
+# 3.0.3
+#       1.更新部分字段.
+#       2.修改custom build version的信息显示错误.
 # 3.0.2
 #       1.更新打包文件的信息.
 # 3.0.1
@@ -35,9 +41,9 @@ echo "################################################################"
 echo "# Author "
 echo "#       Alex.zhong"
 echo "# Last Modified Date" 
-echo "#       2016-06-17"
+echo "#       2016-07-08"
 echo "# Version "
-echo "#       3.0.2"
+echo "#       3.1.0 beta5"
 echo "# Notes "
 echo "#       现在更多的项目被支持!!!"
 echo "################################################################"
@@ -50,7 +56,7 @@ echo "################################################################"
 
 # Declare feature option
 PROJECT_DAFAULT="d5"
-PROJECT_SUPPORT="fp7 bd7 n8 d5"
+PROJECT_SUPPORT="fp7 bd7 n8 d5 p9ke th10"
 
 PROJECT_PATH=$(cd "$(dirname "$0")"; pwd)
 PROJECT_CATEGORY=$(basename `pwd`)
@@ -64,6 +70,7 @@ OPTION_UPDATE=false
 OPTION_NEW=false
 OPTION_RELEASE=false
 OPTION_OTA=false
+OPTION_OPENJDK=true
 
 IS_FLEX_SUPPORT=false
 IS_MBR_SUPPORT=false
@@ -92,18 +99,22 @@ CHECK_ERROR () {
   fi
 }
 
-restore_kernal () {
+RESTORE_KERNAL () {
   cd out/target
   git reset --hard HEAD
   cd ../../
 }
 
 PRINT_STAGE () {
-  echo "###################################################################"
-  echo "#                                                                 #"
-  echo "#   $1"
-  echo "#                                                                 #"
-  echo "###################################################################"
+  echo "###################################################################" >&1 | tee -a build.log
+  echo "#                                                                 #" >&1 | tee -a build.log
+  echo "#   $1"                                                              >&1 | tee -a build.log
+  echo "#                                                                 #" >&1 | tee -a build.log
+  echo "###################################################################" >&1 | tee -a build.log
+}
+
+PRINT () {
+  echo "$1"                                                                  >&1 | tee -a build.log
 }
 #######################################################################
 # 
@@ -129,7 +140,7 @@ if [ $# -ge 1 ]; then
 	#echo ">>>>OTA."
         OPTION_OTA=true;;
       *) 
-	echo "${op} is not valid parameter!"
+	PRINT "${op} is not valid parameter!"
 	exit 1
     esac
   done
@@ -146,14 +157,17 @@ for p in ${PROJECT_SUPPORT};
     if [[ ${PROJECT_CATEGORY_T} =~ $p ]]; then
       PROJECT_DAFAULT=$p
       break
+    elif [[ ${PROJECT_CATEGORY_T} =~ "p9000" ]]; then
+      PROJECT_DAFAULT="p9ke"
+      break
     fi
   done
 
-echo -n "1、请输入项目名[default:${PROJECT_DAFAULT}, support: ${PROJECT_SUPPORT}]:"
+echo -n "1、请输入项目名[默认:${PROJECT_DAFAULT}, 支持: ${PROJECT_SUPPORT}]:"
 read PROJECT
 
 if [ -z ${PROJECT} ]; then
-  echo ">>>未输入项目名！默认: ${PROJECT_DAFAULT}"
+  PRINT ">>>未输入项目名！默认: ${PROJECT_DAFAULT}"
   PROJECT=${PROJECT_DAFAULT}
 else
   IS_PROJECT_SUPPORT=false
@@ -168,13 +182,33 @@ else
   done
   
   if [ ${IS_PROJECT_SUPPORT} == "false" ]; then
-    echo ">>>此脚本不支持编译项目:${PROJECT}，注意项目名大小写敏感！"
+    PRINT ">>>此脚本不支持编译项目:${PROJECT}，注意项目名大小写敏感！"
     exit 1
   fi
 fi
 
 #Setup project build parameters
-if [ ${PROJECT} == "d5" ]; then
+if [ ${PROJECT} == "p9ke" ]; then
+  PROJECT_PLATFORM="MT6797"
+  OPTION_SIGN=false
+  IS_FLEX_SUPPORT=false
+  IS_MBR_SUPPORT=true
+  IS_EBR1_SUPPORT=true
+  IS_EBR2_SUPPORT=true
+  IS_TEE1_SUPPORT=true
+  IS_TEE2_SUPPORT=false
+  IS_ADDON_SUPPORT=true
+elif [ ${PROJECT} == "th10" ]; then
+  PROJECT_PLATFORM="MT8173"
+  OPTION_SIGN=true
+  IS_FLEX_SUPPORT=false
+  IS_MBR_SUPPORT=true
+  IS_EBR1_SUPPORT=true
+  IS_EBR2_SUPPORT=true
+  IS_TEE1_SUPPORT=true
+  IS_TEE2_SUPPORT=false
+  IS_ADDON_SUPPORT=true
+elif [ ${PROJECT} == "d5" ]; then
   PROJECT_PLATFORM="MT6580"
   OPTION_SIGN=false
   IS_FLEX_SUPPORT=true
@@ -216,13 +250,23 @@ elif [ ${PROJECT} == "fp7" ]; then
   IS_ADDON_SUPPORT=true
 fi
 
+# Record Start Timestamp
+MAKECOST=$(date +%s)
+echo "开始时间：`date +%Y%m%d-%H:%M:%S`" > build.log
+
 if [ ${PROJECT} == "n8" ] || [ ${PROJECT} == "fp7" ]; then
   PRINT_STAGE "Setup Audio parameters"
   cp -rv vendor/mediatek/proprietary/custom/${PROJECT}_audio/. vendor/mediatek/proprietary/custom/common/cgen/cfgdefault
 fi
 
+if [ ${OPTION_OPENJDK} == "false" ]; then
+  sed -i 's/^\(requires_openjdk\s*:=\s*\).*$/\1'"false"'/' build/core/main.mk
+fi
+
+# Update Build Number
 BUILD_NUMBER=`date +%j`
 sed -i 's/^\(BUILD_NUMBER\s*:=\s*\).*$/\1'${BUILD_NUMBER}'/' device/mediatek/common/BoardConfig.mk
+
 if [ ${PROJECT} == "n8" ];then
   sed -i 's/^\(NABI_FIRMWARE_VERSION\s*:=\s*\).*$/\1'${BUILD_NUMBER}'/' vendor/fuhu/FuhuConfig-NBV208HMKG-US.mk
 elif [ ${PROJECT} == "fp7" ]; then
@@ -231,8 +275,9 @@ elif [ ${PROJECT} == "bd7" ]; then
   sed -i 's/^\(NABI_FIRMWARE_VERSION\s*:=\s*\).*$/\1'${BUILD_NUMBER}'/' vendor/fuhu/FuhuConfig.mk
 fi
 
+# Update Build Version
 VERSION=`date +%Y%m%d.%H%M%S`
-BUILD_VERSION="MTK_BUILD_VERNO=${VERSION}"
+BUILD_VERSION="${VERSION}"
 sed -i 's/^\(MTK_BUILD_VERNO\s*=\s*\).*$/\1'${BUILD_VERSION}'/' device/arima/${PROJECT}/ProjectConfig.mk
 
 PRINT_STAGE "执行: source build/envsetup.sh"
@@ -243,7 +288,7 @@ lunch full_${PROJECT}-${BUILD_TYPE}
 CHECK_ERROR ${PIPESTATUS[0]}
 
 # make clean must perform before sed
-if [ ${OPTION_NEW} = "true" ]; then
+if [ ${OPTION_NEW} == "true" ]; then
   PRINT_STAGE "执行: make clean"
   make clean
   CHECK_ERROR ${PIPESTATUS[0]}
@@ -255,31 +300,31 @@ fi
 #
 #######################################################################
 # UPDATE-API
-if [ ${OPTION_UPDATE} = "true" ]; then
-  PRINT_STAGE "执行: make ${JOBS} update-api 2>&1 | tee build.log"
-  make ${JOBS} update-api 2>&1 | tee build.log
+if [ ${OPTION_UPDATE} == "true" ]; then
+  PRINT_STAGE "执行: make ${JOBS} update-api 2>&1 | tee -a build.log"
+  make ${JOBS} update-api 2>&1 | tee -a build.log
   CHECK_ERROR ${PIPESTATUS[0]}
 fi
 
-# d5 need to restore kernal file from git server after update-api action
-#if [ "d5" = ${PROJECT} ] || [ "d3" = ${PROJECT} ];then
-#  PRINT_STAGE "Restore Kernal file"
-#  restore_kernal
-#fi
+# Some Project need to restore kernal file from git server after update-api action
+if [ "th10" == ${PROJECT} ] || [ "d3" = ${PROJECT} ];then
+  PRINT_STAGE "Restore Kernal file"
+  RESTORE_KERNAL
+fi
 
-# Full compile
-if [ ${OPTION_UPDATE} = "true" ]; then
+# Full Compile
+if [ ${OPTION_UPDATE} == "true" ]; then
   PRINT_STAGE "执行: make ${JOBS} 2>&1 | tee -a build.log"
   make ${JOBS} 2>&1 | tee -a build.log
   CHECK_ERROR ${PIPESTATUS[0]}
 else
-  PRINT_STAGE "执行: make ${JOBS} 2>&1 | tee build.log"
+  PRINT_STAGE "执行: make ${JOBS} 2>&1 | tee -a build.log"
   make ${JOBS} 2>&1 | tee build.log
   CHECK_ERROR ${PIPESTATUS[0]}
 fi
 
-# OTA package
-if [ ${OPTION_OTA} = "true" ]; then
+# Make OTA package
+if [ ${OPTION_OTA} == "true" ]; then
   PRINT_STAGE "执行: make otapackage"
   make otapackage
   CHECK_ERROR ${PIPESTATUS[0]}
@@ -290,15 +335,15 @@ fi
 # Generate configuration file for Android Studio
 if [ ! -f android.ipr ]; then
   PRINT_STAGE "执行: mmm development/tools/idegen/"
-  echo ">>>生成Andoid Studio工程的配置文件"
+  PRINT ">>>生成Andoid Studio工程的配置文件"
   mmm development/tools/idegen/
   sh ./development/tools/idegen/idegen.sh
 fi
 
 # Generate flex image
-if [ "true" = ${IS_FLEX_SUPPORT} ]; then
+if [ "true" == ${IS_FLEX_SUPPORT} ]; then
    PRINT_STAGE  "perl vendor/LGE/build/flex/flex.pl ${PROJECT} global_com"
-   echo ">>>设置flex环境"
+   PRINT ">>>设置flex环境"
    perl vendor/LGE/build/flex/flex.pl ${PROJECT} global_com
 fi
 
@@ -317,121 +362,122 @@ IMAGETAR_PREFIX="ImageBin_${PROJECT_CATEGORY}_"
 # Remove old image file
 PRINT_STAGE "2、删除旧文件"
 rm -rvf ./../${IMAGETAR_PREFIX}*.tar
-echo ">>>文件已删除"
-echo ""
+PRINT ">>>文件已删除"
+PRINT ""
 
 # Signature
 PRINT_STAGE "3、项目签名"
-if [ ${OPTION_SIGN} = "true" ]; then
-  echo ">>>此项目需要签名。签名将花费约x分钟，请耐心等待"
-  SIGNCOST=$(date +%s)
+if [ ${OPTION_SIGN} == "true" ]; then
+  PRINT ">>>此项目需要签名。签名将花费约x分钟，请耐心等待"
   ./vendor/mediatek/proprietary/scripts/sign-image/sign_image.sh
-  SIGNCOST=$((`date +%s`-SIGNCOST))
-  echo ${SIGNCOST} > ./SIGNCOST.txt
-  echo ">>>签名已完成"
+  PRINT ">>>签名已完成"
 else
-  echo ">>>此项目无需签名。"
+  PRINT ">>>此项目无需签名。"
 fi
+
+# Caculate Make Cost
+MAKECOST=$((`date +%s`-MAKECOST))
+echo ${MAKECOST} > ./MAKECOST
 
 # Show Manifest of Image
 PRINT_STAGE "4、文件清单"
  
   # do not need sign
   #FILE_SNAPSHOT=".repo/manifests/{FILE_SNAPSHOT}"
-  echo ">>>SNAPSHOT  文件： .repo/manifests/${FILE_SNAPSHOT}"
+  PRINT ">>>SNAPSHOT  文件： .repo/manifests/${FILE_SNAPSHOT}"
   
   if [ "true" = ${IS_FLEX_SUPPORT} ]; then
     FILE_FLEX="out/target/product/${PROJECT}/flex.img"
-    echo ">>>FLEX      文件： ${FILE_FLEX} "
+    PRINT ">>>FLEX      文件： ${FILE_FLEX} "
     FILE_FLEX="flex.img"
   fi
 
   FILE_SCATTER="out/target/product/${PROJECT}/${PROJECT_PLATFORM}_Android_scatter.txt"
-  echo ">>>SCATTER   文件： ${FILE_SCATTER} "
+  PRINT ">>>SCATTER   文件： ${FILE_SCATTER} "
   FILE_SCATTER="${PROJECT_PLATFORM}_Android_scatter.txt"
 
   FILE_PRELOADER="out/target/product/${PROJECT}/preloader_${PROJECT}.bin"
-  echo ">>>PRELOADER 文件： ${FILE_PRELOADER} "
+  PRINT ">>>PRELOADER 文件： ${FILE_PRELOADER} "
   FILE_PRELOADER="preloader_${PROJECT}.bin"
   
-  if [ ${OPTION_SIGN} = "true" ]; then
+  if [ ${OPTION_SIGN} == "true" ]; then
     # need sign
     FILE="boot-sign.img"
     FILE_BOOT="out/target/product/${PROJECT}/signed_bin/${FILE}"
-    echo ">>>BOOT      文件： ${FILE_BOOT} "
+    PRINT ">>>BOOT      文件： ${FILE_BOOT} "
     FILE_BOOT=${FILE}
   
     FILE="cache-sign.img"
     FILE_CACHE="out/target/product/${PROJECT}/signed_bin/${FILE}"
-    echo ">>>CACHE     文件： ${FILE_CACHE} "
+    PRINT ">>>CACHE     文件： ${FILE_CACHE} "
     FILE_CACHE=${FILE}
 
     FILE="lk-sign.bin"
     FILE_LK="out/target/product/${PROJECT}/signed_bin/${FILE}"
-    echo ">>>LK        文件： ${FILE_LK} "
+    PRINT ">>>LK        文件： ${FILE_LK} "
     FILE_LK=${FILE}
 
     FILE="logo-sign.bin"
     FILE_LOGO="out/target/product/${PROJECT}/signed_bin/${FILE}"
-    echo ">>>LOGO      文件： ${FILE_LOGO} "
+    PRINT ">>>LOGO      文件： ${FILE_LOGO} "
     FILE_LOGO=${FILE}
 
     FILE="recovery-sign.img"
     FILE_RECOVERY="out/target/product/${PROJECT}/signed_bin/${FILE}"
-    echo ">>>RECOVERY  文件： ${FILE_RECOVERY} "
+    PRINT ">>>RECOVERY  文件： ${FILE_RECOVERY} "
     FILE_RECOVERY=${FILE}
 
     FILE="secro-sign.img"
     FILE_SECRO="out/target/product/${PROJECT}/signed_bin/${FILE}"
-    echo ">>>SECRO     文件： ${FILE_SECRO} "
+    PRINT ">>>SECRO     文件： ${FILE_SECRO} "
     FILE_SECRO=${FILE}
 
     FILE="system-sign.img"
     FILE_SYSTEM="out/target/product/${PROJECT}/signed_bin/${FILE}"
-    echo ">>>SYSTEM    文件： ${FILE_SYSTEM} "
+    PRINT ">>>SYSTEM    文件： ${FILE_SYSTEM} "
     FILE_SYSTEM=${FILE}
 
     FILE="userdata-sign.img"
     FILE_USERDATA="out/target/product/${PROJECT}/signed_bin/${FILE}"
-    echo ">>>USERDATA  文件： ${FILE_USERDATA} "
+    PRINT ">>>USERDATA  文件： ${FILE_USERDATA} "
     FILE_USERDATA=${FILE}
     
-    if [ "true" = ${IS_MBR_SUPPORT} ]; then
+    if [ "true" == ${IS_MBR_SUPPORT} ]; then
     FILE="MBR-sign"
     FILE_MBR="out/target/product/${PROJECT}/signed_bin/${FILE}"
-    echo ">>>MBR       文件： ${FILE_MBR} "
+    PRINT ">>>MBR       文件： ${FILE_MBR} "
     FILE_MBR=${FILE}
     fi
 
-    if [ "true" = ${IS_EBR1_SUPPORT} ]; then
+    if [ "true" == ${IS_EBR1_SUPPORT} ]; then
     FILE="EBR1-sign"
     FILE_EBR1="out/target/product/${PROJECT}/signed_bin/${FILE}"
-    echo ">>>EBR1      文件： ${FILE_EBR1} "
+    PRINT ">>>EBR1      文件： ${FILE_EBR1} "
     FILE_EBR1=${FILE}
     fi
 
-    if [ "true" = ${IS_EBR2_SUPPORT} ]; then
+    if [ "true" == ${IS_EBR2_SUPPORT} ]; then
     FILE="EBR2-sign"
     FILE_EBR2="out/target/product/${PROJECT}/signed_bin/${FILE}"
-    echo ">>>EBR2      文件： ${FILE_EBR2} "
+    PRINT ">>>EBR2      文件： ${FILE_EBR2} "
     FILE_EBR2=${FILE}
     fi
 
-    if [ "true" = ${IS_TEE1_SUPPORT} ]; then
+    if [ "true" == ${IS_TEE1_SUPPORT} ]; then
     FILE="tz-sign.img"
     FILE_TEE1="out/target/product/${PROJECT}/signed_bin/${FILE}"
-    echo ">>>TEE1      文件： ${FILE_TEE1} "
+    PRINT ">>>TEE1      文件： ${FILE_TEE1} "
     FILE_TEE1=${FILE}
     fi
 
-    if [ "true" = ${IS_TEE2_SUPPORT} ]; then
+    if [ "true" == ${IS_TEE2_SUPPORT} ]; then
     FILE="tz-sign.img"
     FILE_TEE2="out/target/product/${PROJECT}/signed_bin/${FILE}"
-    echo ">>>TEE2      文件： ${FILE_TEE2} "
+    PRINT ">>>TEE2      文件： ${FILE_TEE2} "
     FILE_TEE2=${FILE}
     fi
 
-    if [ "true" = ${IS_ADDON_SUPPORT} ]; then
+    if [ "true" == ${IS_ADDON_SUPPORT} ]; then
       FILE="addon.img"
       if [ ${PROJECT} == "bd7" ]; then
         FILE="addon.img"
@@ -439,89 +485,89 @@ PRINT_STAGE "4、文件清单"
       else
         FILE_ADDON="out/target/product/${PROJECT}/${FILE}"
       fi
-      echo ">>>ADDON    文件： ${FILE_ADDON} "
+      PRINT ">>>ADDON     文件： ${FILE_ADDON} "
       FILE_ADDON=${FILE}
     fi
   else
     FILE="boot.img"
     FILE_BOOT="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>BOOT      文件： ${FILE_BOOT} "
+    PRINT ">>>BOOT      文件： ${FILE_BOOT} "
     FILE_BOOT=${FILE}
   
     FILE="cache.img"
     FILE_CACHE="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>CACHE     文件： ${FILE_CACHE} "
+    PRINT ">>>CACHE     文件： ${FILE_CACHE} "
     FILE_CACHE=${FILE}
 
     FILE="lk.bin"
     FILE_LK="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>LK        文件： ${FILE_LK} "
+    PRINT ">>>LK        文件： ${FILE_LK} "
     FILE_LK=${FILE}
 
     FILE="logo.bin"
     FILE_LOGO="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>LOGO      文件： ${FILE_LOGO} "
+    PRINT ">>>LOGO      文件： ${FILE_LOGO} "
     FILE_LOGO=${FILE}
 
     FILE="recovery.img"
     FILE_RECOVERY="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>RECOVERY  文件： ${FILE_RECOVERY} "
+    PRINT ">>>RECOVERY  文件： ${FILE_RECOVERY} "
     FILE_RECOVERY=${FILE}
 
     FILE="secro.img"
     FILE_SECRO="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>SECRO     文件： ${FILE_SECRO} "
+    PRINT ">>>SECRO     文件： ${FILE_SECRO} "
     FILE_SECRO=${FILE}
 
     FILE="system.img"
     FILE_SYSTEM="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>SYSTEM    文件： ${FILE_SYSTEM} "
+    PRINT ">>>SYSTEM    文件： ${FILE_SYSTEM} "
     FILE_SYSTEM=${FILE}
 
     FILE="userdata.img"
     FILE_USERDATA="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>USERDATA  文件： ${FILE_USERDATA} "
+    PRINT ">>>USERDATA  文件： ${FILE_USERDATA} "
     FILE_USERDATA=${FILE}
 
-    if [ "true" = ${IS_MBR_SUPPORT} ]; then
+    if [ "true" == ${IS_MBR_SUPPORT} ]; then
     FILE="MBR"
     FILE_MBR="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>MBR       文件： ${FILE_MBR} "
+    PRINT ">>>MBR       文件： ${FILE_MBR} "
     FILE_MBR=${FILE}
     fi
 
-    if [ "true" = ${IS_EBR1_SUPPORT} ]; then
+    if [ "true" == ${IS_EBR1_SUPPORT} ]; then
     FILE="EBR1"
     FILE_EBR1="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>EBR1      文件： ${FILE_EBR1} "
+    PRINT ">>>EBR1      文件： ${FILE_EBR1} "
     FILE_EBR1=${FILE}
     fi
 
-    if [ "true" = ${IS_EBR2_SUPPORT} ]; then
+    if [ "true" == ${IS_EBR2_SUPPORT} ]; then
     FILE="EBR2"
     FILE_EBR2="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>EBR2      文件： ${FILE_EBR2} "
+    PRINT ">>>EBR2      文件： ${FILE_EBR2} "
     FILE_EBR2=${FILE}
     fi
 
-    if [ "true" = ${IS_TEE1_SUPPORT} ]; then
+    if [ "true" == ${IS_TEE1_SUPPORT} ]; then
     FILE="tz.img"
     FILE_TEE1="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>TEE1      文件： ${FILE_TEE1} "
+    PRINT ">>>TEE1      文件： ${FILE_TEE1} "
     FILE_TEE1=${FILE}
     fi
 
-    if [ "true" = ${IS_TEE2_SUPPORT} ]; then
+    if [ "true" == ${IS_TEE2_SUPPORT} ]; then
     FILE="tz.img"
     FILE_TEE2="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>TEE2      文件： ${FILE_TEE2} "
+    PRINT ">>>TEE2      文件： ${FILE_TEE2} "
     FILE_TEE2=${FILE}
     fi
 
-    if [ "true" = ${IS_ADDON_SUPPORT} ]; then
+    if [ "true" == ${IS_ADDON_SUPPORT} ]; then
     FILE="addon.img"
     FILE_ADDON="out/target/product/${PROJECT}/${FILE}"
-    echo ">>>ADDON     文件： ${FILE_ADDON} "
+    PRINT ">>>ADDON     文件： ${FILE_ADDON} "
     FILE_ADDON=${FILE}
     fi
   fi
@@ -534,37 +580,37 @@ echo ">>>开始压缩.."
 TARDATE=`date +%Y%m%d-%H%M`
 TARFILE=${IMAGETAR_PREFIX}${TARDATE}.tar
 
-if [ ${OPTION_SIGN} = "true" ]; then
+if [ ${OPTION_SIGN} == "true" ]; then
   tar cvf ${PROJECT_PATH}/../${TARFILE} -C ".repo/manifests/" ${FILE_SNAPSHOT} \
                                         -C "../../out/target/product/${PROJECT}/" ${FILE_SCATTER} ${FILE_PRELOADER} \
                                         -C "signed_bin" ${FILE_BOOT} ${FILE_CACHE} ${FILE_LK} ${FILE_LOGO} ${FILE_RECOVERY} ${FILE_SECRO}\
                                            ${FILE_SYSTEM} ${FILE_USERDATA}
 
-  if [ "true" = ${IS_FLEX_SUPPORT} ]; then
+  if [ "true" == ${IS_FLEX_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_FLEX}
   fi
 
-  if [ "true" = ${IS_MBR_SUPPORT} ]; then
+  if [ "true" == ${IS_MBR_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_MBR}
   fi
 
-  if [ "true" = ${IS_EBR1_SUPPORT} ]; then
+  if [ "true" == ${IS_EBR1_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_EBR1}
   fi
 
-  if [ "true" = ${IS_EBR2_SUPPORT} ]; then
+  if [ "true" == ${IS_EBR2_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_EBR2}
   fi
 
-  if [ "true" = ${IS_TEE1_SUPPORT} ]; then
+  if [ "true" == ${IS_TEE1_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_TEE1}
   fi
 
-  if [ "true" = ${IS_TEE2_SUPPORT} ]; then
+  if [ "true" == ${IS_TEE2_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_TEE2}
   fi
 
-  if [ "true" = ${IS_ADDON_SUPPORT} ]; then
+  if [ "true" == ${IS_ADDON_SUPPORT} ]; then
     if [ ${PROJECT} == "bd7" ]; then
     tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_ADDON}
     else
@@ -573,40 +619,40 @@ if [ ${OPTION_SIGN} = "true" ]; then
   fi
 else
   tar cvf ${PROJECT_PATH}/../${TARFILE} -C ".repo/manifests/" ${FILE_SNAPSHOT} \
-                                         -C "../../out/target/product/${PROJECT}/" ${FILE_SCATTER} ${FILE_PRELOADER} ${FILE_BOOT} \
+                                        -C "../../out/target/product/${PROJECT}/" ${FILE_SCATTER} ${FILE_PRELOADER} ${FILE_BOOT} \
                                              ${FILE_CACHE} ${FILE_LK} ${FILE_LOGO} ${FILE_RECOVERY} ${FILE_SECRO} ${FILE_SYSTEM} ${FILE_USERDATA}
   
-  if [ "true" = ${IS_FLEX_SUPPORT} ]; then
+  if [ "true" == ${IS_FLEX_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_FLEX}
   fi
 
-  if [ "true" = ${IS_MBR_SUPPORT} ]; then
+  if [ "true" == ${IS_MBR_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_MBR}
   fi
 
-  if [ "true" = ${IS_EBR1_SUPPORT} ]; then
+  if [ "true" == ${IS_EBR1_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_EBR1}
   fi
 
-  if [ "true" = ${IS_EBR2_SUPPORT} ]; then
+  if [ "true" == ${IS_EBR2_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_EBR2}
   fi
 
-  if [ "true" = ${IS_TEE1_SUPPORT} ]; then
+  if [ "true" == ${IS_TEE1_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_TEE1}
   fi
 
-  if [ "true" = ${IS_TEE2_SUPPORT} ]; then
+  if [ "true" == ${IS_TEE2_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_TEE2}
   fi
 
-  if [ "true" = ${IS_ADDON_SUPPORT} ]; then
+  if [ "true" == ${IS_ADDON_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_ADDON}
   fi
 fi
 
 # Change image name for official release
-if [ "true" = ${OPTION_RELEASE} ]; then
+if [ "true" == ${OPTION_RELEASE} ]; then
   VERSION_NAME="${VERSION_NAME}-`date +%b-%d-%Y`.tar"
   mv ${PROJECT_PATH}/../${TARFILE} ${PROJECT_PATH}/../${VERSION_NAME}
   TARFILE=${VERSION_NAME}
@@ -615,6 +661,6 @@ echo ""
 
 # Finish and Output
 PRINT_STAGE "6、完成"
-echo ">>>目标文件: ${TARFILE}"
-echo ""
-echo ""
+PRINT ">>>目标文件: ${TARFILE}"
+PRINT ""
+PRINT ""
