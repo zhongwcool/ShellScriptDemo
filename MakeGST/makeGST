@@ -3,14 +3,16 @@
 # Author 
 #       Alex.zhong
 # Last Modified Date
-#       2016-07-08
+#       2016-07-20
 # Version
-#       3.1.0
+#       3.1.1
 #
 # Change Log
+# 3.1.1
+#       1.调整P9000的打包文件.
 # 3.1.0
 #       1.优化log输出.
-#       2.增加对P9000和TH10的支持.
+#       2.增加对TH10和P9000的支持.
 # 3.0.3
 #       1.更新部分字段.
 #       2.修改custom build version的信息显示错误.
@@ -41,9 +43,9 @@ echo "################################################################"
 echo "# Author "
 echo "#       Alex.zhong"
 echo "# Last Modified Date" 
-echo "#       2016-07-08"
+echo "#       2016-07-20"
 echo "# Version "
-echo "#       3.1.0 beta5"
+echo "#       3.1.1"
 echo "# Notes "
 echo "#       现在更多的项目被支持!!!"
 echo "################################################################"
@@ -55,7 +57,7 @@ echo "################################################################"
 #######################################################################
 
 # Declare feature option
-PROJECT_DAFAULT="d5"
+PROJECT_DAFAULT="p9ke"
 PROJECT_SUPPORT="fp7 bd7 n8 d5 p9ke th10"
 
 PROJECT_PATH=$(cd "$(dirname "$0")"; pwd)
@@ -80,10 +82,17 @@ IS_TEE1_SUPPORT=false
 IS_TEE2_SUPPORT=false
 IS_ADDON_SUPPORT=false
 
+IS_EXT_MD1ROM_SUPPORT=false
+IS_EXT_MD1DSP_SUPPORT=false
+IS_EXT_MD1ARM7_SUPPORT=false
+IS_EXT_MD3ROM_SUPPORT=false
+IS_EXT_TINYSYS_SUPPORT=false
+IS_EXT_TRUSTZONE_SUPPORT=false
+
 CUSTOMIZATION="CIS_Open"
 #BUILD_TYPE="user"
-BUILD_TYPE="userdebug"
-#BUILD_TYPE="eng"
+#BUILD_TYPE="userdebug"
+BUILD_TYPE="eng"
 VERSION_NAME="LGX210AT-00-V10c-GLOBAL-COM"
 #######################################################################
 # 
@@ -192,22 +201,29 @@ if [ ${PROJECT} == "p9ke" ]; then
   PROJECT_PLATFORM="MT6797"
   OPTION_SIGN=false
   IS_FLEX_SUPPORT=false
-  IS_MBR_SUPPORT=true
-  IS_EBR1_SUPPORT=true
-  IS_EBR2_SUPPORT=true
-  IS_TEE1_SUPPORT=true
+  IS_MBR_SUPPORT=false
+  IS_EBR1_SUPPORT=false
+  IS_EBR2_SUPPORT=false
+  IS_TEE1_SUPPORT=false
   IS_TEE2_SUPPORT=false
-  IS_ADDON_SUPPORT=true
+  IS_ADDON_SUPPORT=false
+
+  IS_EXT_MD1ROM_SUPPORT=true
+  IS_EXT_MD1DSP_SUPPORT=true
+  IS_EXT_MD1ARM7_SUPPORT=true
+  IS_EXT_MD3ROM_SUPPORT=true
+  IS_EXT_TINYSYS_SUPPORT=true
+  IS_EXT_TRUSTZONE_SUPPORT=true
 elif [ ${PROJECT} == "th10" ]; then
   PROJECT_PLATFORM="MT8173"
-  OPTION_SIGN=true
+  OPTION_SIGN=false
   IS_FLEX_SUPPORT=false
   IS_MBR_SUPPORT=true
-  IS_EBR1_SUPPORT=true
-  IS_EBR2_SUPPORT=true
+  IS_EBR1_SUPPORT=false
+  IS_EBR2_SUPPORT=false
   IS_TEE1_SUPPORT=true
   IS_TEE2_SUPPORT=false
-  IS_ADDON_SUPPORT=true
+  IS_ADDON_SUPPORT=false
 elif [ ${PROJECT} == "d5" ]; then
   PROJECT_PLATFORM="MT6580"
   OPTION_SIGN=false
@@ -252,7 +268,7 @@ fi
 
 # Record Start Timestamp
 MAKECOST=$(date +%s)
-echo "开始时间：`date +%Y%m%d-%H:%M:%S`" > build.log
+echo "开始时间：`date +%Y-%m-%d-%H:%M:%S`" > build.log
 
 if [ ${PROJECT} == "n8" ] || [ ${PROJECT} == "fp7" ]; then
   PRINT_STAGE "Setup Audio parameters"
@@ -396,9 +412,15 @@ PRINT_STAGE "4、文件清单"
   PRINT ">>>SCATTER   文件： ${FILE_SCATTER} "
   FILE_SCATTER="${PROJECT_PLATFORM}_Android_scatter.txt"
 
+  if [ ${PROJECT} == "th10" ]; then
+  FILE_PRELOADER="out/target/product/${PROJECT}/preloader.bin"
+  PRINT ">>>PRELOADER 文件： ${FILE_PRELOADER} "
+  FILE_PRELOADER="preloader.bin"
+  else
   FILE_PRELOADER="out/target/product/${PROJECT}/preloader_${PROJECT}.bin"
   PRINT ">>>PRELOADER 文件： ${FILE_PRELOADER} "
   FILE_PRELOADER="preloader_${PROJECT}.bin"
+  fi
   
   if [ ${OPTION_SIGN} == "true" ]; then
     # need sign
@@ -570,6 +592,48 @@ PRINT_STAGE "4、文件清单"
     PRINT ">>>ADDON     文件： ${FILE_ADDON} "
     FILE_ADDON=${FILE}
     fi
+	
+    if [ "true" == ${IS_EXT_MD1ROM_SUPPORT} ]; then
+    FILE="md1rom.img"
+    FILE_MD1ROM="out/target/product/${PROJECT}/${FILE}"
+    PRINT ">>>MD1ROM    文件： ${FILE_MD1ROM} "
+    FILE_MD1ROM=${FILE}
+    fi
+	
+    if [ "true" == ${IS_EXT_MD1DSP_SUPPORT} ]; then
+    FILE="md1dsp.img"
+    FILE_MD1DSP="out/target/product/${PROJECT}/${FILE}"
+    PRINT ">>>MD1DSP    文件： ${FILE_MD1DSP} "
+    FILE_MD1DSP=${FILE}
+    fi
+	
+    if [ "true" == ${IS_EXT_MD1ARM7_SUPPORT} ]; then
+    FILE="md1arm7.img"
+    FILE_MD1ARM7="out/target/product/${PROJECT}/${FILE}"
+    PRINT ">>>MD1ARM7   文件： ${FILE_MD1ARM7} "
+    FILE_MD1ARM7=${FILE}
+    fi
+	
+    if [ "true" == ${IS_EXT_MD3ROM_SUPPORT} ]; then
+    FILE="md3rom.img"
+    FILE_MD3ROM="out/target/product/${PROJECT}/${FILE}"
+    PRINT ">>>MD3ROM    文件： ${FILE_MD3ROM} "
+    FILE_MD3ROM=${FILE}
+    fi
+	
+    if [ "true" == ${IS_EXT_TINYSYS_SUPPORT} ]; then
+    FILE="tinysys-scp.bin"
+    FILE_TINYSYS="out/target/product/${PROJECT}/${FILE}"
+    PRINT ">>>TINYSYS   文件： ${FILE_TINYSYS} "
+    FILE_TINYSYS=${FILE}
+    fi
+	
+    if [ "true" == ${IS_EXT_TRUSTZONE_SUPPORT} ]; then
+    FILE="trustzone.bin"
+    FILE_TRUSTZONE="out/target/product/${PROJECT}/${FILE}"
+    PRINT ">>>TRUSTZONE 文件： ${FILE_TRUSTZONE} "
+    FILE_TRUSTZONE=${FILE}
+    fi
   fi
 
 echo ""
@@ -649,6 +713,30 @@ else
   if [ "true" == ${IS_ADDON_SUPPORT} ]; then
   tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_ADDON}
   fi
+  
+  if [ "true" == ${IS_EXT_MD1ROM_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_MD1ROM}
+  fi
+		
+  if [ "true" == ${IS_EXT_MD1DSP_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_MD1DSP}
+  fi
+		
+  if [ "true" == ${IS_EXT_MD1ARM7_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_MD1ARM7}
+  fi
+		
+  if [ "true" == ${IS_EXT_MD3ROM_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_MD3ROM}
+  fi
+		
+  if [ "true" == ${IS_EXT_TINYSYS_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_TINYSYS}
+  fi
+		
+  if [ "true" == ${IS_EXT_TRUSTZONE_SUPPORT} ]; then
+  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_TRUSTZONE}
+  fi
 fi
 
 # Change image name for official release
@@ -664,3 +752,4 @@ PRINT_STAGE "6、完成"
 PRINT ">>>目标文件: ${TARFILE}"
 PRINT ""
 PRINT ""
+PRINT "结束时间：`date +%Y-%m-%d-%H:%M:%S`" > build.log
