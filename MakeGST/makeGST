@@ -3,11 +3,14 @@
 # Author 
 #       Alex.zhong
 # Last Modified Date
-#       2016-07-20
+#       2016-07-21
 # Version
-#       3.1.1
+#       3.1.2
 #
 # Change Log
+# 3.1.2
+#       1.改进ImageBin的命名.
+#       2.修改日志输出被清除的Bug.
 # 3.1.1
 #       1.调整P9000的打包文件.
 # 3.1.0
@@ -43,9 +46,9 @@ echo "################################################################"
 echo "# Author "
 echo "#       Alex.zhong"
 echo "# Last Modified Date" 
-echo "#       2016-07-20"
+echo "#       2016-07-21"
 echo "# Version "
-echo "#       3.1.1"
+echo "#       3.1.2"
 echo "# Notes "
 echo "#       现在更多的项目被支持!!!"
 echo "################################################################"
@@ -268,7 +271,7 @@ fi
 
 # Record Start Timestamp
 MAKECOST=$(date +%s)
-echo "开始时间：`date +%Y-%m-%d-%H:%M:%S`" > build.log
+echo "开始时间：`date +%Y-%m-%d %H:%M:%S`" > build.log
 
 if [ ${PROJECT} == "n8" ] || [ ${PROJECT} == "fp7" ]; then
   PRINT_STAGE "Setup Audio parameters"
@@ -373,7 +376,7 @@ repo manifest -r -o .repo/manifests/${FILE_SNAPSHOT}
 #
 #######################################################################
 IMAGESET="ImageBin"
-IMAGETAR_PREFIX="ImageBin_${PROJECT_CATEGORY}_"
+IMAGETAR_PREFIX="ImageBin_${PROJECT_CATEGORY}_${BUILD_TYPE}_"
 
 # Remove old image file
 PRINT_STAGE "2、删除旧文件"
@@ -752,4 +755,4 @@ PRINT_STAGE "6、完成"
 PRINT ">>>目标文件: ${TARFILE}"
 PRINT ""
 PRINT ""
-PRINT "结束时间：`date +%Y-%m-%d-%H:%M:%S`" > build.log
+PRINT "结束时间：`date +%Y-%m-%d %H:%M:%S`"
