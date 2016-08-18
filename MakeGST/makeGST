@@ -3,11 +3,19 @@
 # Author 
 #       Alex.zhong
 # Last Modified Date
-#       2016-07-21
+#       2016-08-10
 # Version
-#       3.1.2
+#       3.1.5
 #
 # Change Log
+# 3.1.5
+#       1.调整TH10项目的boot文件恢复方法.
+#       2.TH10开启Sign支持.
+# 3.1.4
+#       1.默认打开TH10的flex开关.
+# 3.1.3
+#       1.开启TH10对flex的编译支持.
+#       2.修改日志日期显示错误的Bug.
 # 3.1.2
 #       1.改进ImageBin的命名.
 #       2.修改日志输出被清除的Bug.
@@ -27,18 +35,6 @@
 #       1.增加对fp7 bd7 n8项目编译的支持.
 #       2.智能识别默认项目名.
 #       3.优化ImageBin命名规则以提升用户体验.
-# 1.3.1
-#       1.增加OTA编译支持.
-# 1.3.0
-#       1.新增正式版本发布功能;
-#       2.发布版本集成镜像快照.
-# 1.2.0
-#       1.Add flex2 support;
-#       2.Save snapshot of codebase for release.
-# 1.1.0 
-#       Setup new ImageBin target path
-# 1.0.0 
-#       New Compile Script for Android M of D5
 ################################################################
 
 # Print basic info of package tool
@@ -46,11 +42,11 @@ echo "################################################################"
 echo "# Author "
 echo "#       Alex.zhong"
 echo "# Last Modified Date" 
-echo "#       2016-07-21"
+echo "#       2016-08-10"
 echo "# Version "
-echo "#       3.1.2"
+echo "#       3.1.5"
 echo "# Notes "
-echo "#       现在更多的项目被支持!!!"
+echo "#       8月10日后更新的TH10代码需要使用版本3.1.5以上的脚本!"
 echo "################################################################"
 
 #######################################################################
@@ -219,8 +215,8 @@ if [ ${PROJECT} == "p9ke" ]; then
   IS_EXT_TRUSTZONE_SUPPORT=true
 elif [ ${PROJECT} == "th10" ]; then
   PROJECT_PLATFORM="MT8173"
-  OPTION_SIGN=false
-  IS_FLEX_SUPPORT=false
+  OPTION_SIGN=true
+  IS_FLEX_SUPPORT=true
   IS_MBR_SUPPORT=true
   IS_EBR1_SUPPORT=false
   IS_EBR2_SUPPORT=false
@@ -271,7 +267,7 @@ fi
 
 # Record Start Timestamp
 MAKECOST=$(date +%s)
-echo "开始时间：`date +%Y-%m-%d %H:%M:%S`" > build.log
+echo "开始时间：`date +%Y-%m-%d\ %H:%M:%S`" > build.log
 
 if [ ${PROJECT} == "n8" ] || [ ${PROJECT} == "fp7" ]; then
   PRINT_STAGE "Setup Audio parameters"
@@ -325,10 +321,18 @@ if [ ${OPTION_UPDATE} == "true" ]; then
   CHECK_ERROR ${PIPESTATUS[0]}
 fi
 
-# Some Project need to restore kernal file from git server after update-api action
+# Some Project need to restore kernel file from git server after update-api action
 if [ "th10" == ${PROJECT} ] || [ "d3" = ${PROJECT} ];then
-  PRINT_STAGE "Restore Kernal file"
+  PRINT_STAGE "Restore Kernel file"
   RESTORE_KERNAL
+
+  if [ "th10" == ${PROJECT} ];then
+    if [ "user" == ${BUILD_TYPE} ];then
+      cp -rf out/target/product/${PROJECT}/user_out/* out/target/product/${PROJECT}/
+    else
+      cp -rf out/target/product/${PROJECT}/eng_out/* out/target/product/${PROJECT}/
+    fi
+  fi
 fi
 
 # Full Compile
@@ -755,4 +759,4 @@ PRINT_STAGE "6、完成"
 PRINT ">>>目标文件: ${TARFILE}"
 PRINT ""
 PRINT ""
-PRINT "结束时间：`date +%Y-%m-%d %H:%M:%S`"
+PRINT "结束时间：`date +%Y-%m-%d\ %H:%M:%S`"
