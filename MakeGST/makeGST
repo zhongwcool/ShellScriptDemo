@@ -3,11 +3,18 @@
 # Author 
 #       Alex.zhong
 # Last Modified Date
-#       2016-08-10
+#       2016-09-13
 # Version
-#       3.1.5
+#       3.2.2
 #
 # Change Log
+# 3.2.2
+#       1.TH10更新了flex2，开始启用CA.
+# 3.2.1
+#       1.TH10更新了kernel等模块.
+# 3.2.0
+#       1.以文件夹形式提供烧写镜像，默认不再执行tar打包.
+#       2.TH10修改flex2编译参数.
 # 3.1.5
 #       1.调整TH10项目的boot文件恢复方法.
 #       2.TH10开启Sign支持.
@@ -42,11 +49,12 @@ echo "################################################################"
 echo "# Author "
 echo "#       Alex.zhong"
 echo "# Last Modified Date" 
-echo "#       2016-08-10"
+echo "#       2016-09-12"
 echo "# Version "
-echo "#       3.1.5"
+echo "#       3.2.2"
 echo "# Notes "
 echo "#       8月10日后更新的TH10代码需要使用版本3.1.5以上的脚本!"
+echo "#       9月09日后更新的TH10代码需要使用版本3.2.1以上的脚本!"
 echo "################################################################"
 
 #######################################################################
@@ -71,7 +79,8 @@ OPTION_UPDATE=false
 OPTION_NEW=false
 OPTION_RELEASE=false
 OPTION_OTA=false
-OPTION_OPENJDK=true
+OPTION_PACKAGE=false
+OPTION_OPENJDK=false
 
 IS_FLEX_SUPPORT=false
 IS_MBR_SUPPORT=false
@@ -93,6 +102,8 @@ CUSTOMIZATION="CIS_Open"
 #BUILD_TYPE="userdebug"
 BUILD_TYPE="eng"
 VERSION_NAME="LGX210AT-00-V10c-GLOBAL-COM"
+
+IMAGETAR_OUT="ImageBin_${BUILD_TYPE}_"
 #######################################################################
 # 
 # Function Area
@@ -124,6 +135,14 @@ PRINT_STAGE () {
 PRINT () {
   echo "$1"                                                                  >&1 | tee -a build.log
 }
+
+COPY_TO_IMAGEBIN () {
+  if [ ! -d ${IMAGETAR_OUT} ]; then
+    mkdir -p ${IMAGETAR_OUT}
+  fi
+  cp -rf $1 ${IMAGETAR_OUT}
+  #PRINT "拷贝文件：$1"
+}
 #######################################################################
 # 
 # Shell Script Parameters Handle Area
@@ -147,6 +166,10 @@ if [ $# -ge 1 ]; then
       "ota") 
 	#echo ">>>>OTA."
         OPTION_OTA=true;;
+      "package")
+        OPTION_PACKAGE=true;;
+      "pkg")
+        OPTION_PACKAGE=true;;
       *) 
 	PRINT "${op} is not valid parameter!"
 	exit 1
@@ -215,7 +238,7 @@ if [ ${PROJECT} == "p9ke" ]; then
   IS_EXT_TRUSTZONE_SUPPORT=true
 elif [ ${PROJECT} == "th10" ]; then
   PROJECT_PLATFORM="MT8173"
-  OPTION_SIGN=true
+  OPTION_SIGN=false
   IS_FLEX_SUPPORT=true
   IS_MBR_SUPPORT=true
   IS_EBR1_SUPPORT=false
@@ -322,17 +345,9 @@ if [ ${OPTION_UPDATE} == "true" ]; then
 fi
 
 # Some Project need to restore kernel file from git server after update-api action
-if [ "th10" == ${PROJECT} ] || [ "d3" = ${PROJECT} ];then
+if [ "d3" = ${PROJECT} ];then
   PRINT_STAGE "Restore Kernel file"
   RESTORE_KERNAL
-
-  if [ "th10" == ${PROJECT} ];then
-    if [ "user" == ${BUILD_TYPE} ];then
-      cp -rf out/target/product/${PROJECT}/user_out/* out/target/product/${PROJECT}/
-    else
-      cp -rf out/target/product/${PROJECT}/eng_out/* out/target/product/${PROJECT}/
-    fi
-  fi
 fi
 
 # Full Compile
@@ -366,7 +381,7 @@ fi
 # Generate flex image
 if [ "true" == ${IS_FLEX_SUPPORT} ]; then
    PRINT_STAGE  "perl vendor/LGE/build/flex/flex.pl ${PROJECT} global_com"
-   PRINT ">>>设置flex环境"
+   PRINT ">>>编译flex文件"
    perl vendor/LGE/build/flex/flex.pl ${PROJECT} global_com
 fi
 
@@ -384,7 +399,8 @@ IMAGETAR_PREFIX="ImageBin_${PROJECT_CATEGORY}_${BUILD_TYPE}_"
 
 # Remove old image file
 PRINT_STAGE "2、删除旧文件"
-rm -rvf ./../${IMAGETAR_PREFIX}*.tar
+rm -rvf ./../${IMAGETAR_PREFIX}*.tar.gz
+rm -rvf ./../${IMAGETAR_PREFIX}*
 PRINT ">>>文件已删除"
 PRINT ""
 
@@ -404,28 +420,38 @@ echo ${MAKECOST} > ./MAKECOST
 
 # Show Manifest of Image
 PRINT_STAGE "4、文件清单"
+
+TARDATE=`date +%Y%m%d-%H%M`
+IMAGETAR_OUT=./../${IMAGETAR_PREFIX}${TARDATE}
+IMAGETAR_PREFIX=${IMAGETAR_PREFIX}${TARDATE}
  
   # do not need sign
-  #FILE_SNAPSHOT=".repo/manifests/{FILE_SNAPSHOT}"
-  PRINT ">>>SNAPSHOT  文件： .repo/manifests/${FILE_SNAPSHOT}"
+  FILE_SNAPSHOT=".repo/manifests/${FILE_SNAPSHOT}"
+  PRINT ">>>SNAPSHOT  文件： ${FILE_SNAPSHOT}"
+  COPY_TO_IMAGEBIN ${FILE_SNAPSHOT}
+  FILE_SNAPSHOT=${FILE_SNAPSHOT}
   
   if [ "true" = ${IS_FLEX_SUPPORT} ]; then
     FILE_FLEX="out/target/product/${PROJECT}/flex.img"
     PRINT ">>>FLEX      文件： ${FILE_FLEX} "
+    COPY_TO_IMAGEBIN ${FILE_FLEX}
     FILE_FLEX="flex.img"
   fi
 
   FILE_SCATTER="out/target/product/${PROJECT}/${PROJECT_PLATFORM}_Android_scatter.txt"
   PRINT ">>>SCATTER   文件： ${FILE_SCATTER} "
+  COPY_TO_IMAGEBIN ${FILE_SCATTER}
   FILE_SCATTER="${PROJECT_PLATFORM}_Android_scatter.txt"
 
   if [ ${PROJECT} == "th10" ]; then
   FILE_PRELOADER="out/target/product/${PROJECT}/preloader.bin"
   PRINT ">>>PRELOADER 文件： ${FILE_PRELOADER} "
+  COPY_TO_IMAGEBIN ${FILE_PRELOADER}
   FILE_PRELOADER="preloader.bin"
   else
   FILE_PRELOADER="out/target/product/${PROJECT}/preloader_${PROJECT}.bin"
   PRINT ">>>PRELOADER 文件： ${FILE_PRELOADER} "
+  COPY_TO_IMAGEBIN ${FILE_PRELOADER}
   FILE_PRELOADER="preloader_${PROJECT}.bin"
   fi
   
@@ -434,47 +460,56 @@ PRINT_STAGE "4、文件清单"
     FILE="boot-sign.img"
     FILE_BOOT="out/target/product/${PROJECT}/signed_bin/${FILE}"
     PRINT ">>>BOOT      文件： ${FILE_BOOT} "
+    COPY_TO_IMAGEBIN ${FILE_BOOT}
     FILE_BOOT=${FILE}
   
     FILE="cache-sign.img"
     FILE_CACHE="out/target/product/${PROJECT}/signed_bin/${FILE}"
     PRINT ">>>CACHE     文件： ${FILE_CACHE} "
+    COPY_TO_IMAGEBIN ${FILE_CACHE}
     FILE_CACHE=${FILE}
 
     FILE="lk-sign.bin"
     FILE_LK="out/target/product/${PROJECT}/signed_bin/${FILE}"
     PRINT ">>>LK        文件： ${FILE_LK} "
+    COPY_TO_IMAGEBIN ${FILE_LK}
     FILE_LK=${FILE}
 
     FILE="logo-sign.bin"
     FILE_LOGO="out/target/product/${PROJECT}/signed_bin/${FILE}"
     PRINT ">>>LOGO      文件： ${FILE_LOGO} "
+    COPY_TO_IMAGEBIN ${FILE_LOGO}
     FILE_LOGO=${FILE}
 
     FILE="recovery-sign.img"
     FILE_RECOVERY="out/target/product/${PROJECT}/signed_bin/${FILE}"
     PRINT ">>>RECOVERY  文件： ${FILE_RECOVERY} "
+    COPY_TO_IMAGEBIN ${FILE_RECOVERY}
     FILE_RECOVERY=${FILE}
 
     FILE="secro-sign.img"
     FILE_SECRO="out/target/product/${PROJECT}/signed_bin/${FILE}"
     PRINT ">>>SECRO     文件： ${FILE_SECRO} "
+    COPY_TO_IMAGEBIN ${FILE_SECRO}
     FILE_SECRO=${FILE}
 
     FILE="system-sign.img"
     FILE_SYSTEM="out/target/product/${PROJECT}/signed_bin/${FILE}"
     PRINT ">>>SYSTEM    文件： ${FILE_SYSTEM} "
+    COPY_TO_IMAGEBIN ${FILE_SYSTEM}
     FILE_SYSTEM=${FILE}
 
     FILE="userdata-sign.img"
     FILE_USERDATA="out/target/product/${PROJECT}/signed_bin/${FILE}"
     PRINT ">>>USERDATA  文件： ${FILE_USERDATA} "
+    COPY_TO_IMAGEBIN ${FILE_USERDATA}
     FILE_USERDATA=${FILE}
     
     if [ "true" == ${IS_MBR_SUPPORT} ]; then
     FILE="MBR-sign"
     FILE_MBR="out/target/product/${PROJECT}/signed_bin/${FILE}"
     PRINT ">>>MBR       文件： ${FILE_MBR} "
+    COPY_TO_IMAGEBIN ${FILE_MBR}
     FILE_MBR=${FILE}
     fi
 
@@ -482,6 +517,7 @@ PRINT_STAGE "4、文件清单"
     FILE="EBR1-sign"
     FILE_EBR1="out/target/product/${PROJECT}/signed_bin/${FILE}"
     PRINT ">>>EBR1      文件： ${FILE_EBR1} "
+    COPY_TO_IMAGEBIN ${FILE_EBR1}
     FILE_EBR1=${FILE}
     fi
 
@@ -489,6 +525,7 @@ PRINT_STAGE "4、文件清单"
     FILE="EBR2-sign"
     FILE_EBR2="out/target/product/${PROJECT}/signed_bin/${FILE}"
     PRINT ">>>EBR2      文件： ${FILE_EBR2} "
+    COPY_TO_IMAGEBIN ${FILE_EBR2}
     FILE_EBR2=${FILE}
     fi
 
@@ -496,6 +533,7 @@ PRINT_STAGE "4、文件清单"
     FILE="tz-sign.img"
     FILE_TEE1="out/target/product/${PROJECT}/signed_bin/${FILE}"
     PRINT ">>>TEE1      文件： ${FILE_TEE1} "
+    COPY_TO_IMAGEBIN ${FILE_TEE1}
     FILE_TEE1=${FILE}
     fi
 
@@ -503,6 +541,7 @@ PRINT_STAGE "4、文件清单"
     FILE="tz-sign.img"
     FILE_TEE2="out/target/product/${PROJECT}/signed_bin/${FILE}"
     PRINT ">>>TEE2      文件： ${FILE_TEE2} "
+    COPY_TO_IMAGEBIN ${FILE_TEE2}
     FILE_TEE2=${FILE}
     fi
 
@@ -515,53 +554,63 @@ PRINT_STAGE "4、文件清单"
         FILE_ADDON="out/target/product/${PROJECT}/${FILE}"
       fi
       PRINT ">>>ADDON     文件： ${FILE_ADDON} "
+      COPY_TO_IMAGEBIN ${FILE_ADDON}
       FILE_ADDON=${FILE}
     fi
   else
     FILE="boot.img"
     FILE_BOOT="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>BOOT      文件： ${FILE_BOOT} "
+    COPY_TO_IMAGEBIN ${FILE_BOOT}
     FILE_BOOT=${FILE}
   
     FILE="cache.img"
     FILE_CACHE="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>CACHE     文件： ${FILE_CACHE} "
+    COPY_TO_IMAGEBIN ${FILE_CACHE}
     FILE_CACHE=${FILE}
 
     FILE="lk.bin"
     FILE_LK="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>LK        文件： ${FILE_LK} "
+    COPY_TO_IMAGEBIN ${FILE_LK}
     FILE_LK=${FILE}
 
     FILE="logo.bin"
     FILE_LOGO="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>LOGO      文件： ${FILE_LOGO} "
+    COPY_TO_IMAGEBIN ${FILE_LOGO}
     FILE_LOGO=${FILE}
 
     FILE="recovery.img"
     FILE_RECOVERY="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>RECOVERY  文件： ${FILE_RECOVERY} "
+    COPY_TO_IMAGEBIN ${FILE_RECOVERY}
     FILE_RECOVERY=${FILE}
 
     FILE="secro.img"
     FILE_SECRO="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>SECRO     文件： ${FILE_SECRO} "
+    COPY_TO_IMAGEBIN ${FILE_SECRO}
     FILE_SECRO=${FILE}
 
     FILE="system.img"
     FILE_SYSTEM="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>SYSTEM    文件： ${FILE_SYSTEM} "
+    COPY_TO_IMAGEBIN ${FILE_SYSTEM}
     FILE_SYSTEM=${FILE}
 
     FILE="userdata.img"
     FILE_USERDATA="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>USERDATA  文件： ${FILE_USERDATA} "
+    COPY_TO_IMAGEBIN ${FILE_USERDATA}
     FILE_USERDATA=${FILE}
 
     if [ "true" == ${IS_MBR_SUPPORT} ]; then
     FILE="MBR"
     FILE_MBR="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>MBR       文件： ${FILE_MBR} "
+    COPY_TO_IMAGEBIN ${FILE_MBR}
     FILE_MBR=${FILE}
     fi
 
@@ -569,6 +618,7 @@ PRINT_STAGE "4、文件清单"
     FILE="EBR1"
     FILE_EBR1="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>EBR1      文件： ${FILE_EBR1} "
+    COPY_TO_IMAGEBIN ${FILE_EBR1}
     FILE_EBR1=${FILE}
     fi
 
@@ -576,6 +626,7 @@ PRINT_STAGE "4、文件清单"
     FILE="EBR2"
     FILE_EBR2="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>EBR2      文件： ${FILE_EBR2} "
+    COPY_TO_IMAGEBIN ${FILE_EBR2}
     FILE_EBR2=${FILE}
     fi
 
@@ -583,6 +634,7 @@ PRINT_STAGE "4、文件清单"
     FILE="tz.img"
     FILE_TEE1="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>TEE1      文件： ${FILE_TEE1} "
+    COPY_TO_IMAGEBIN ${FILE_TEE1}
     FILE_TEE1=${FILE}
     fi
 
@@ -590,6 +642,7 @@ PRINT_STAGE "4、文件清单"
     FILE="tz.img"
     FILE_TEE2="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>TEE2      文件： ${FILE_TEE2} "
+    COPY_TO_IMAGEBIN ${FILE_TEE2}
     FILE_TEE2=${FILE}
     fi
 
@@ -597,6 +650,7 @@ PRINT_STAGE "4、文件清单"
     FILE="addon.img"
     FILE_ADDON="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>ADDON     文件： ${FILE_ADDON} "
+    COPY_TO_IMAGEBIN ${FILE_ADDON}
     FILE_ADDON=${FILE}
     fi
 	
@@ -604,6 +658,7 @@ PRINT_STAGE "4、文件清单"
     FILE="md1rom.img"
     FILE_MD1ROM="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>MD1ROM    文件： ${FILE_MD1ROM} "
+    COPY_TO_IMAGEBIN ${FILE_MD1ROM}
     FILE_MD1ROM=${FILE}
     fi
 	
@@ -611,6 +666,7 @@ PRINT_STAGE "4、文件清单"
     FILE="md1dsp.img"
     FILE_MD1DSP="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>MD1DSP    文件： ${FILE_MD1DSP} "
+    COPY_TO_IMAGEBIN ${FILE_MD1DSP}
     FILE_MD1DSP=${FILE}
     fi
 	
@@ -618,6 +674,7 @@ PRINT_STAGE "4、文件清单"
     FILE="md1arm7.img"
     FILE_MD1ARM7="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>MD1ARM7   文件： ${FILE_MD1ARM7} "
+    COPY_TO_IMAGEBIN ${FILE_MD1ARM7}
     FILE_MD1ARM7=${FILE}
     fi
 	
@@ -625,6 +682,7 @@ PRINT_STAGE "4、文件清单"
     FILE="md3rom.img"
     FILE_MD3ROM="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>MD3ROM    文件： ${FILE_MD3ROM} "
+    COPY_TO_IMAGEBIN ${FILE_MD3ROM}
     FILE_MD3ROM=${FILE}
     fi
 	
@@ -632,6 +690,7 @@ PRINT_STAGE "4、文件清单"
     FILE="tinysys-scp.bin"
     FILE_TINYSYS="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>TINYSYS   文件： ${FILE_TINYSYS} "
+    COPY_TO_IMAGEBIN ${FILE_TINYSYS}
     FILE_TINYSYS=${FILE}
     fi
 	
@@ -639,124 +698,32 @@ PRINT_STAGE "4、文件清单"
     FILE="trustzone.bin"
     FILE_TRUSTZONE="out/target/product/${PROJECT}/${FILE}"
     PRINT ">>>TRUSTZONE 文件： ${FILE_TRUSTZONE} "
+    COPY_TO_IMAGEBIN ${FILE_TRUSTZONE}
     FILE_TRUSTZONE=${FILE}
     fi
   fi
 
 echo ""
 
-# Compress image
+# Image Compressing
+if [ "true" == ${OPTION_PACKAGE} ]; then
 PRINT_STAGE "5、文件压缩"
 echo ">>>开始压缩.."
-TARDATE=`date +%Y%m%d-%H%M`
-TARFILE=${IMAGETAR_PREFIX}${TARDATE}.tar
-
-if [ ${OPTION_SIGN} == "true" ]; then
-  tar cvf ${PROJECT_PATH}/../${TARFILE} -C ".repo/manifests/" ${FILE_SNAPSHOT} \
-                                        -C "../../out/target/product/${PROJECT}/" ${FILE_SCATTER} ${FILE_PRELOADER} \
-                                        -C "signed_bin" ${FILE_BOOT} ${FILE_CACHE} ${FILE_LK} ${FILE_LOGO} ${FILE_RECOVERY} ${FILE_SECRO}\
-                                           ${FILE_SYSTEM} ${FILE_USERDATA}
-
-  if [ "true" == ${IS_FLEX_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_FLEX}
-  fi
-
-  if [ "true" == ${IS_MBR_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_MBR}
-  fi
-
-  if [ "true" == ${IS_EBR1_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_EBR1}
-  fi
-
-  if [ "true" == ${IS_EBR2_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_EBR2}
-  fi
-
-  if [ "true" == ${IS_TEE1_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_TEE1}
-  fi
-
-  if [ "true" == ${IS_TEE2_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/signed_bin" ${FILE_TEE2}
-  fi
-
-  if [ "true" == ${IS_ADDON_SUPPORT} ]; then
-    if [ ${PROJECT} == "bd7" ]; then
-    tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_ADDON}
-    else
-    tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_ADDON}
-    fi
-  fi
-else
-  tar cvf ${PROJECT_PATH}/../${TARFILE} -C ".repo/manifests/" ${FILE_SNAPSHOT} \
-                                        -C "../../out/target/product/${PROJECT}/" ${FILE_SCATTER} ${FILE_PRELOADER} ${FILE_BOOT} \
-                                             ${FILE_CACHE} ${FILE_LK} ${FILE_LOGO} ${FILE_RECOVERY} ${FILE_SECRO} ${FILE_SYSTEM} ${FILE_USERDATA}
-  
-  if [ "true" == ${IS_FLEX_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_FLEX}
-  fi
-
-  if [ "true" == ${IS_MBR_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_MBR}
-  fi
-
-  if [ "true" == ${IS_EBR1_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_EBR1}
-  fi
-
-  if [ "true" == ${IS_EBR2_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_EBR2}
-  fi
-
-  if [ "true" == ${IS_TEE1_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_TEE1}
-  fi
-
-  if [ "true" == ${IS_TEE2_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_TEE2}
-  fi
-
-  if [ "true" == ${IS_ADDON_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_ADDON}
-  fi
-  
-  if [ "true" == ${IS_EXT_MD1ROM_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_MD1ROM}
-  fi
-		
-  if [ "true" == ${IS_EXT_MD1DSP_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_MD1DSP}
-  fi
-		
-  if [ "true" == ${IS_EXT_MD1ARM7_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_MD1ARM7}
-  fi
-		
-  if [ "true" == ${IS_EXT_MD3ROM_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_MD3ROM}
-  fi
-		
-  if [ "true" == ${IS_EXT_TINYSYS_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_TINYSYS}
-  fi
-		
-  if [ "true" == ${IS_EXT_TRUSTZONE_SUPPORT} ]; then
-  tar -rvf ${PROJECT_PATH}/../${TARFILE} -C "./out/target/product/${PROJECT}/" ${FILE_TRUSTZONE}
-  fi
-fi
-
-# Change image name for official release
-if [ "true" == ${OPTION_RELEASE} ]; then
-  VERSION_NAME="${VERSION_NAME}-`date +%b-%d-%Y`.tar"
-  mv ${PROJECT_PATH}/../${TARFILE} ${PROJECT_PATH}/../${VERSION_NAME}
-  TARFILE=${VERSION_NAME}
-fi
-echo ""
+TARFILE=${IMAGETAR_PREFIX}.tar.gz
+cd ${IMAGETAR_OUT}
+tar -cvzf ./../${TARFILE} *
 
 # Finish and Output
 PRINT_STAGE "6、完成"
 PRINT ">>>目标文件: ${TARFILE}"
 PRINT ""
 PRINT ""
+else
+# Finish and Output
+PRINT_STAGE "5、完成"
+PRINT ">>>目标文件: ${IMAGETAR_OUT}"
+PRINT ""
+PRINT ""
+fi
+
 PRINT "结束时间：`date +%Y-%m-%d\ %H:%M:%S`"
