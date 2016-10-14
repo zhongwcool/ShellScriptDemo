@@ -3,11 +3,13 @@
 # Author 
 #       Alex.zhong
 # Last Modified Date
-#       2016-09-13
+#       2016-10-14
 # Version
-#       3.2.2
+#       3.3.0
 #
 # Change Log
+# 3.3.0
+#       1.增加对I50PJ项目的编译支持.
 # 3.2.2
 #       1.TH10更新了flex2，开始启用CA.
 # 3.2.1
@@ -31,17 +33,6 @@
 # 3.1.0
 #       1.优化log输出.
 #       2.增加对TH10和P9000的支持.
-# 3.0.3
-#       1.更新部分字段.
-#       2.修改custom build version的信息显示错误.
-# 3.0.2
-#       1.更新打包文件的信息.
-# 3.0.1
-#       1.修改非签名项目压缩出错的问题.
-# 3.0.0
-#       1.增加对fp7 bd7 n8项目编译的支持.
-#       2.智能识别默认项目名.
-#       3.优化ImageBin命名规则以提升用户体验.
 ################################################################
 
 # Print basic info of package tool
@@ -49,12 +40,11 @@ echo "################################################################"
 echo "# Author "
 echo "#       Alex.zhong"
 echo "# Last Modified Date" 
-echo "#       2016-09-12"
+echo "#       2016-10-14"
 echo "# Version "
-echo "#       3.2.2"
+echo "#       3.3.0"
 echo "# Notes "
-echo "#       8月10日后更新的TH10代码需要使用版本3.1.5以上的脚本!"
-echo "#       9月09日后更新的TH10代码需要使用版本3.2.1以上的脚本!"
+echo "#       现在I50PJ已经加入肯德基豪华套餐！"
 echo "################################################################"
 
 #######################################################################
@@ -65,7 +55,7 @@ echo "################################################################"
 
 # Declare feature option
 PROJECT_DAFAULT="p9ke"
-PROJECT_SUPPORT="fp7 bd7 n8 d5 p9ke th10"
+PROJECT_SUPPORT="fp7 bd7 n8 d5 p9ke th10 i50pj"
 
 PROJECT_PATH=$(cd "$(dirname "$0")"; pwd)
 PROJECT_CATEGORY=$(basename `pwd`)
@@ -97,11 +87,11 @@ IS_EXT_MD3ROM_SUPPORT=false
 IS_EXT_TINYSYS_SUPPORT=false
 IS_EXT_TRUSTZONE_SUPPORT=false
 
-CUSTOMIZATION="CIS_Open"
+#CUSTOMIZATION="CIS_Open"
 #BUILD_TYPE="user"
 #BUILD_TYPE="userdebug"
 BUILD_TYPE="eng"
-VERSION_NAME="LGX210AT-00-V10c-GLOBAL-COM"
+#VERSION_NAME="LGX210AT-00-V10c-GLOBAL-COM"
 
 IMAGETAR_OUT="ImageBin_${BUILD_TYPE}_"
 #######################################################################
@@ -219,7 +209,24 @@ else
 fi
 
 #Setup project build parameters
-if [ ${PROJECT} == "p9ke" ]; then
+if [ ${PROJECT} == "i50pj" ]; then
+  PROJECT_PLATFORM="MT6582"
+  OPTION_SIGN=false
+  IS_FLEX_SUPPORT=false
+  IS_MBR_SUPPORT=true
+  IS_EBR1_SUPPORT=true
+  IS_EBR2_SUPPORT=false
+  IS_TEE1_SUPPORT=false
+  IS_TEE2_SUPPORT=false
+  IS_ADDON_SUPPORT=false
+
+  IS_EXT_MD1ROM_SUPPORT=false
+  IS_EXT_MD1DSP_SUPPORT=false
+  IS_EXT_MD1ARM7_SUPPORT=false
+  IS_EXT_MD3ROM_SUPPORT=false
+  IS_EXT_TINYSYS_SUPPORT=false
+  IS_EXT_TRUSTZONE_SUPPORT=false
+elif [ ${PROJECT} == "p9ke" ]; then
   PROJECT_PLATFORM="MT6797"
   OPTION_SIGN=false
   IS_FLEX_SUPPORT=false
@@ -289,7 +296,7 @@ elif [ ${PROJECT} == "fp7" ]; then
 fi
 
 # Record Start Timestamp
-MAKECOST=$(date +%s)
+#MAKECOST=$(date +%s)
 echo "开始时间：`date +%Y-%m-%d\ %H:%M:%S`" > build.log
 
 if [ ${PROJECT} == "n8" ] || [ ${PROJECT} == "fp7" ]; then
@@ -415,8 +422,8 @@ else
 fi
 
 # Caculate Make Cost
-MAKECOST=$((`date +%s`-MAKECOST))
-echo ${MAKECOST} > ./MAKECOST
+#MAKECOST=$((`date +%s`-MAKECOST))
+#echo ${MAKECOST} > ./MAKECOST
 
 # Show Manifest of Image
 PRINT_STAGE "4、文件清单"
